@@ -14,10 +14,16 @@
 #include <NSF_Core.h>
 #include <NSF_File.h>
 
+class NSFCore : public CNSFCore {
+public:
+    BYTE ReadMemory_pAPU(WORD a) { return CNSFCore::ReadMemory_pAPU(a); }
+    void WriteMemory_pAPU(WORD a,BYTE v) { CNSFCore::WriteMemory_pAPU(a, v); }
+};
+
 int16_t samples[(APU_SAMPLES_SIZE/sizeof(int16_t))+0x20];
 const int16_t *apu_samples = samples;
 
-CNSFCore *nsf_core;
+NSFCore *nsf_core;
 uint8_t nsf_dummy_code[3] = {0x4c,0x00,0x80}; // jmp $8000
 
 void apu_init(void) {
@@ -35,7 +41,7 @@ void apu_init(void) {
     nsf_dummy_file.pDataBuffer = nsf_dummy_code;
     nsf_dummy_file.nDataBufferSize = sizeof(nsf_dummy_code);
 
-    nsf_core = new CNSFCore;
+    nsf_core = new NSFCore;
     nsf_core->Initialize();
     nsf_core->SetPlaybackOptions(APU_SAMPLE_RATE, APU_CHANNEL_COUNT);
     nsf_core->LoadNSF(&nsf_dummy_file);
