@@ -2599,34 +2599,34 @@ uint8_t LoadEnvelopeData(uint8_t y) {
 }
 
 const uint8_t MusicHeaderData[0xab] = {
-    DeathMusHdr-MHD,            // event music
-    GameOverMusHdr-MHD,
-    VictoryMusHdr-MHD,
-    WinCastleMusHdr-MHD,
-    GameOverMusHdr-MHD,
-    EndOfLevelMusHdr-MHD,
-    TimeRunningOutHdr-MHD,
-    SilenceHdr-MHD,
+    0xa5,            // event music
+    0x59,
+    0x54,
+    0x64,
+    0x59,
+    0x3c,
+    0x31,
+    0x4b,
 
-    GroundLevelPart1Hdr-MHD,    // area music
-    WaterMusHdr-MHD,
-    UndergroundMusHdr-MHD,
-    CastleMusHdr-MHD,
-    Star_CloudHdr-MHD,
-    GroundLevelLeadInHdr-MHD,
-    Star_CloudHdr-MHD,
-    SilenceHdr-MHD,
+    0x69,    // area music
+    0x5e,
+    0x46,
+    0x4f,
+    0x36,
+    0x8d,
+    0x36,
+    0x4b,
 
-    GroundLevelLeadInHdr-MHD,   // ground level music layout
-    GroundLevelPart1Hdr-MHD, GroundLevelPart1Hdr-MHD,
-    GroundLevelPart2AHdr-MHD, GroundLevelPart2BHdr-MHD, GroundLevelPart2AHdr-MHD, GroundLevelPart2CHdr-MHD,
-    GroundLevelPart2AHdr-MHD, GroundLevelPart2BHdr-MHD, GroundLevelPart2AHdr-MHD, GroundLevelPart2CHdr-MHD,
-    GroundLevelPart3AHdr-MHD, GroundLevelPart3BHdr-MHD, GroundLevelPart3AHdr-MHD, GroundLevelLeadInHdr-MHD,
-    GroundLevelPart1Hdr-MHD, GroundLevelPart1Hdr-MHD,
-    GroundLevelPart4AHdr-MHD, GroundLevelPart4BHdr-MHD, GroundLevelPart4AHdr-MHD, GroundLevelPart4CHdr-MHD,
-    GroundLevelPart4AHdr-MHD, GroundLevelPart4BHdr-MHD, GroundLevelPart4AHdr-MHD, GroundLevelPart4CHdr-MHD,
-    GroundLevelPart3AHdr-MHD, GroundLevelPart3BHdr-MHD, GroundLevelPart3AHdr-MHD, GroundLevelLeadInHdr-MHD,
-    GroundLevelPart4AHdr-MHD, GroundLevelPart4BHdr-MHD, GroundLevelPart4AHdr-MHD, GroundLevelPart4CHdr-MHD,
+    0x8d,   // ground level music layout
+    0x69, 0x69,
+    0x6f, 0x75, 0x6f, 0x7b,
+    0x6f, 0x75, 0x6f, 0x7b,
+    0x81, 0x87, 0x81, 0x8d,
+    0x69, 0x69,
+    0x93, 0x99, 0x93, 0x9f,
+    0x93, 0x99, 0x93, 0x9f,
+    0x81, 0x87, 0x81, 0x8d,
+    0x93, 0x99, 0x93, 0x9f,
 
 // music headers
 // header format is as follows:

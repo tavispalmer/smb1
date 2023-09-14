@@ -11,6 +11,9 @@
 #include "apu.h"
 
 #include <stdio.h>
+#ifdef _WIN32
+# include <windows.h>
+#endif
 #include <NSF_Core.h>
 #include <NSF_File.h>
 

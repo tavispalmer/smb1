@@ -3,8 +3,14 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/param.h>
-#include <time.h>
+#ifdef _MSC_VER
+# define MIN min
+# define ssize_t long long
+# include <windows.h>
+#else
+# include <sys/param.h>
+# include <time.h>
+#endif
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -201,11 +207,15 @@ bool al_get_buffer(al_t *al, ALuint *buffer) {
                 return false;
             
             /* Must sleep as there is no proper blocking method. */
+#ifdef _WIN32
+            Sleep(1);
+#else
             struct timespec time = {
                 .tv_sec = 0L,
                 .tv_nsec = 1000000L // 1ms
             };
             while (nanosleep(&time, &time) == -1 && errno == EINTR) {}
+#endif
         }
     }
 
@@ -264,13 +274,13 @@ void al_set_nonblock_state(al_t *al, bool state) {
  * END OPENAL CODE
 */
 
-int main(int, char**) {
+int main(int argc, char **argv) {
 
     GLFWwindow *window;
 
     if (!glfwInit())
         return -1;
-
+    
     window = glfwCreateWindow(1536, 1440, "smb1", NULL, NULL);
     if (!window) {
         glfwTerminate();
