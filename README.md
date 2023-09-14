@@ -4,7 +4,10 @@ A (work-in-progress) C port of Super Mario Bros. for the NES.
 
 ## Building
 
-CMake is used for building the executable.
+Make sure CMake is installed on your system, as it is used for building the executable.
+
+In order to successfully build, **a copy of the original Super Mario Bros. ROM is required.**
+Rename the ROM file `smb1.nes`, and place it in the root directory of this repository *before* running the commands below.
 
 ### Linux
 
