@@ -14,10 +14,11 @@
 #include <NSF_Core.h>
 #include <NSF_File.h>
 
+// hack to ensure ReadMemory_pAPU and WriteMemory_pAPU are public
 class NSFCore : public CNSFCore {
 public:
     BYTE ReadMemory_pAPU(WORD a) { return CNSFCore::ReadMemory_pAPU(a); }
-    void WriteMemory_pAPU(WORD a,BYTE v) { CNSFCore::WriteMemory_pAPU(a, v); }
+    void WriteMemory_pAPU(WORD a, BYTE v) { CNSFCore::WriteMemory_pAPU(a, v); }
 };
 
 int16_t samples[(APU_SAMPLES_SIZE/sizeof(int16_t))+0x20];
