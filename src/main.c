@@ -281,7 +281,10 @@ int main(int argc, char **argv) {
     if (!glfwInit())
         return -1;
     
-    window = glfwCreateWindow(1536, 1440, "smb1", NULL, NULL);
+    float xscale, yscale;
+    glfwGetWindowContentScale(window, &xscale, &yscale);
+
+    window = glfwCreateWindow((int) (768*xscale), (int) (720*yscale), "smb1", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
