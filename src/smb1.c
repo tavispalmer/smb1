@@ -736,51 +736,50 @@ const uint8_t GameOverModeValue     = 3;
 // $8000
 void Start(void) {
     uint8_t a, x, y;
-    bool c, z, v, n;
 
-    // sei();                   // pretty standard 6502 type init here
-    // cld();
-    lda(0x10);                  // init PPU control register 1
+    // sei                      // pretty standard 6502 type init here
+    // cld
+    a = 0x10;                   // init PPU control register 1
     ppu_write_ppuctrl(a);
-    ldx(0xff);                  // reset stack pointer
-    sp = x; // txs();
+    x = 0xff;                   // reset stack pointer
+    sp = x;
 // VBlank1:
-    lda(ppu_read_ppustatus());  // wait two frames
-    // bpl(VBlank1);
+    a = ppu_read_ppustatus();   // wait two frames
+    // bpl VBlank1
 // VBlank2:
-    lda(ppu_read_ppustatus());
-    // bpl(VBlank2);
-    ldy(ColdBootOffset);        // load default cold boot pointer
-    ldx(0x05);                  // this is where we check for a warm boot
+    a = ppu_read_ppustatus();
+    // bpl VBlank2
+    y = ColdBootOffset;         // load default cold boot pointer
+    x = 0x05;                   // this is where we check for a warm boot
 WBootCheck:
-    lda(TopScoreDisplay[x]);    // check each score digit in the top score
-    cmp(10);                    // to see if we have a valid digit
-    bcs(ColdBoot);              // if not, give up and proceed with cold boot
-    dex();
-    bpl(WBootCheck);
-    lda(*WarmBootValidation);   // second checkpoint, check to see if
-    cmp(0xa5);                  // another location has a specific value
-    bne(ColdBoot);
-    ldy(WarmBootOffset);        // if passed both, load warm boot pointer
+    a = TopScoreDisplay[x];     // check each score digit in the top score
+    if ((int8_t)a >= 10)                // to see if we have a valid digit
+        goto ColdBoot;          // if not, give up and proceed with cold boot
+    --x;
+    if ((int8_t)x >= 0) goto WBootCheck;
+    a = *WarmBootValidation;    // second checkpoint, check to see if
+    if (a != 0xa5)              // another location has a specific value
+        goto ColdBoot;
+    y = WarmBootOffset;         // if passed both, load warm boot pointer
 ColdBoot:
     a = InitializeMemory(y);    // clear memory using pointer in Y
     apu_write_dmc_raw(a);       // reset delta counter load register
-    sta(*OperMode);             // reset primary mode of operation
-    lda(0xa5);                  // set warm boot flag
-    sta(*WarmBootValidation);
-    sta(*PseudoRandomBitReg);   // set seed for pseudorandom register
-    lda(0x0f);
+    *OperMode = a;              // reset primary mode of operation
+    a = 0xa5;                   // set warm boot flag
+    *WarmBootValidation = a;
+    *PseudoRandomBitReg = a;    // set seed for pseudorandom register
+    a = 0x0f;
     apu_write_snd_chn(a);       // enable all sound channels except dmc
-    lda(0x06);
+    a = 0x06;
     ppu_write_ppumask(a);       // turn off clipping for OAM and background
     MoveAllSpritesOffscreen();
     InitializeNameTables();     // initialize both name tables
-    inc(*DisableScreenFlag);    // set flag to disable screen output
-    lda(*Mirror_PPU_CTRL_REG1);
-    ora(0x80);                  // enable NMIs
+    ++*DisableScreenFlag;       // set flag to disable screen output
+    a = *Mirror_PPU_CTRL_REG1;
+    a |= 0x80;                  // enable NMIs
     WritePPUReg1(a);
 // EndlessLoop:
-    // jmp(EndlessLoop);        // endless loop, need I say more?
+    // jmp EndlessLoop          // endless loop, need I say more?
 }
 
 const uint8_t *VRAM_AddrTable[0x13] = {
@@ -797,132 +796,136 @@ uint8_t VRAM_Buffer_Offset[0x02] = {
     0x00, 0x00
 };
 
+#include <stdio.h>
+
 // $8082
 void NonMaskableInterrupt(void) {
     uint8_t a, x, y;
-    bool c, z, v, n;
+    uint8_t m0;
+    bool c, ct;
+
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
 
-    lda(*Mirror_PPU_CTRL_REG1);         // disable NMIs in mirror reg
-    and(0x7f);                          // save all other bits
-    sta(*Mirror_PPU_CTRL_REG1);
-    and(0x7e);                          // alter name table address to be $2800
+    a = *Mirror_PPU_CTRL_REG1;          // disable NMIs in mirror reg
+    a &= 0x7f;                          // save all other bits
+    *Mirror_PPU_CTRL_REG1 = a;
+    a &= 0x7e;                          // alter name table address to be $2800
     ppu_write_ppuctrl(a);               // (essentially $2000) but save other bits
-    lda(*Mirror_PPU_CTRL_REG2);         // disable OAM and background display by default
-    and(0xe6);
-    ldy(*DisableScreenFlag);            // get screen disable flag
-    bne(ScreenOff);                     // if set, used bits as-is
-    lda(*Mirror_PPU_CTRL_REG2);         // otherwise reenable bits and save them
-    ora(0x1e);
+    a = *Mirror_PPU_CTRL_REG2;          // disable OAM and background display by default
+    a &= 0xe6;
+    y = *DisableScreenFlag;             // get screen disable flag
+    if (y) goto ScreenOff;              // if set, used bits as-is
+    a = *Mirror_PPU_CTRL_REG2;          // otherwise reenable bits and save them
+    a |= 0x1e;
 ScreenOff:
-    sta(*Mirror_PPU_CTRL_REG2);         // save bits for later but not in register at the moment
-    and(0xe7);                          // disable screen for now
+    *Mirror_PPU_CTRL_REG2 = a;          // save bits for later but not in register at the moment
+    a &= 0xe7;                          // disable screen for now
     ppu_write_ppumask(a);
-    ldx(ppu_read_ppustatus());          // reset flip-flop and reset scroll registers to zero
-    lda(0x00);
+    x = ppu_read_ppustatus();          // reset flip-flop and reset scroll registers to zero
+    a = 0x00;
     InitScroll(a);
     ppu_write_oamaddr(a);               // reset spr-ram address register
-    lda(0x02);                          // perform spr-ram DMA access on $0200-$02ff
+    a = 0x02;                           // perform spr-ram DMA access on $0200-$02ff
     cpu_write_oamdma(a);
-    ldx(*VRAM_Buffer_AddrCtrl);         // load control for pointer to buffer contents
+    x = *VRAM_Buffer_AddrCtrl;          // load control for pointer to buffer contents
                                         // set indirect at $00 to pointer
     UpdateScreen(VRAM_AddrTable[x]);    // update screen with buffer contents
-    ldy(0x00);
-    ldx(*VRAM_Buffer_AddrCtrl);         // check for usage of $0341
-    cpx(0x06);
-    bne(InitBuffer);
-    iny();                              // get offset based on usage
+    y = 0x00;
+    x = *VRAM_Buffer_AddrCtrl;          // check for usage of $0341
+    if (x != 0x06)
+        goto InitBuffer;
+    ++y;                                // get offset based on usage
 InitBuffer:
-    ldx(VRAM_Buffer_Offset[y]);
-    lda(0x00);                          // clear buffer header at last location
-    sta(VRAM_Buffer1_Offset[x]);        
-    sta(VRAM_Buffer1[x]);
-    sta(*VRAM_Buffer_AddrCtrl);         // reinit address control to $0301
-    lda(*Mirror_PPU_CTRL_REG2);         // copy mirror of $2001 to register
+    x = VRAM_Buffer_Offset[y];
+    a = 0x00;                           // clear buffer header at last location
+    VRAM_Buffer1_Offset[x] = a;
+    VRAM_Buffer1[x] = a;
+    *VRAM_Buffer_AddrCtrl = a;          // reinit address control to $0301
+    a = *Mirror_PPU_CTRL_REG2;          // copy mirror of $2001 to register
     ppu_write_ppumask(a);
     SoundEngine();                      // play sound
     ReadJoypads();                      // read joypads
     PauseRoutine();                     // handle pause
     UpdateTopScore();
-    lda(*GamePauseStatus);              // check for pause status
-    lsr(a);
-    bcs(PauseSkip);
-    lda(*TimerControl);                 // if master timer control not set, decrement
-    beq(DecTimers);                     // all frame and interval timers
-    dec(*TimerControl);
-    bne(NoDecTimers);
+    a = *GamePauseStatus;               // check for pause status
+    c = (a & 0x01) ? true : false; a >>= 1;
+    if (c) goto PauseSkip;
+    a = *TimerControl;                  // if master timer control not set, decrement
+    if (!a) goto DecTimers;             // all frame and interval timers
+    --*TimerControl;
+    if (*TimerControl) goto NoDecTimers;
 DecTimers:
-    ldx(0x14);                          // load end offset for end of frame timers
-    dec(*IntervalTimerControl);         // decrement interval timer control,
-    bpl(DecTimersLoop);                 // if not expired, only frame timers will decrement
-    lda(0x14);
-    sta(*IntervalTimerControl);         // if control for interval timers expired,
-    ldx(0x23);                          // interval timers will decrement along with frame timers
+    x = 0x14;                           // load end offset for end of frame timers
+    --*IntervalTimerControl;            // decrement interval timer control,
+    if ((int8_t)*IntervalTimerControl >= 0) goto DecTimersLoop; // if not expired, only frame timers will decrement
+    a = 0x14;
+    *IntervalTimerControl = a;          // if control for interval timers expired,
+    x = 0x23;                           // interval timers will decrement along with frame timers
 DecTimersLoop:
-    lda(Timers[x]);                     // check current timer
-    beq(SkipExpTimer);                  // if current timer expired, branch to skip,
-    dec(Timers[x]);                     // otherwise decrement the current timer
+    a = Timers[x];                      // check current timer
+    if (!a) goto SkipExpTimer;          // if current timer expired, branch to skip,
+    --Timers[x];                        // otherwise decrement the current timer
 SkipExpTimer:
-    dex();                              // move onto next timer
-    bpl(DecTimersLoop);                 // do this until all timers are dealt with
+    --x;                                // move onto next timer
+    if ((int8_t)x >= 0) goto DecTimersLoop;     // do this until all timers are dealt with
 NoDecTimers:
-    inc(*FrameCounter);                 // increment frame counter
+    ++*FrameCounter;                    // increment frame counter
 PauseSkip:
-    ldx(0x00);
-    ldy(0x07);
-    lda(*PseudoRandomBitReg);           // get first memory location of LSFR bytes
-    and(0x02);                          // mask out all but d1
-    sta(memory[0x00]);                  // save here
-    lda(PseudoRandomBitReg[1]);         // get second memory location
-    and(0x02);                          // mask out all but d1
-    eor(memory[0x00]);                  // perform exclusive-OR on d1 from first and second bytes
-    clc();                              // if neither or both are set, carry will be clear
-    beq(RotPRandomBit);
-    sec();                              // if one or the other is set, carry will be set
+    x = 0x00;
+    y = 0x07;
+    a = *PseudoRandomBitReg;            // get first memory location of LSFR bytes
+    a &= 0x02;                          // mask out all but d1
+    m0 = a;                             // save here
+    a = PseudoRandomBitReg[1];          // get second memory location
+    a &= 0x02;                          // mask out all but d1
+    a ^= m0;                            // perform exclusive-OR on d1 from first and second bytes
+    c = false;                          // if neither or both are set, carry will be clear
+    if (!a) goto RotPRandomBit;
+    c = true;                           // if one or the other is set, carry will be set
 RotPRandomBit:
-    ror(PseudoRandomBitReg[x]);         // rotate carry into d7, and rotate last bit into carry
-    inx();                              // increment to next byte
-    dey();                              // decrement for loop
-    bne(RotPRandomBit);
-    lda(*Sprite0HitDetectFlag);         // check for flag here
-    beq(SkipSprite0);
+    ct = c; c = (PseudoRandomBitReg[x] & 0x01) ? true : false; PseudoRandomBitReg[x] = (PseudoRandomBitReg[x] >> 1) | (ct ? 0x80 : 0x00); // rotate carry into d7, and rotate last bit into carry
+    ++x;                                // increment to next byte
+    --y;                                // decrement for loop
+    if (y) goto RotPRandomBit;
+    a = *Sprite0HitDetectFlag;          // check for flag here
+    if (!a) goto SkipSprite0;
 Sprite0Clr:
-    lda(ppu_read_ppustatus());          // wait for sprite 0 flag to clear, which will
-    // and(0x40);                       // not happen until vblank has ended
-    // bne(Sprite0Clr);
-    lda(*GamePauseStatus);              // if in pause mode, do not bother with sprites at all
-    lsr(a);
-    bcs(Sprite0Hit);
+    a = ppu_read_ppustatus();           // wait for sprite 0 flag to clear, which will
+    // and #%01000000                   // not happen until vblank has ended
+    // bne Sprite0Clr
+    a = *GamePauseStatus;               // if in pause mode, do not bother with sprites at all
+    c = (a & 0x01) ? true : false; a >>= 1;
+    if (c) goto Sprite0Hit;
     MoveSpritesOffscreen();
     SpriteShuffler();
 Sprite0Hit:
-    lda(ppu_read_ppustatus());          // do sprite #0 hit detection
+    a = ppu_read_ppustatus();           // do sprite #0 hit detection
+    // and #%01000000
+    // beq Sprite0Hit
     ppu_draw(0x1f);
-    // and(0x40);
-    // beq(Sprite0Hit);
-    ldy(0x14);                          // small delay, to wait until we hit horizontal blank time
+    y = 0x14;                           // small delay, to wait until we hit horizontal blank time
 HBlankDelay:
-    dey();
-    bne(HBlankDelay);
+    --y;
+    if (y) goto HBlankDelay;
 SkipSprite0:
-    lda(*HorizontalScroll);             // set scroll registers from variables
+    a = *HorizontalScroll;              // set scroll registers from variables
     ppu_write_ppuscroll(a);
-    lda(*VerticalScroll);
+    a = *VerticalScroll;
     ppu_write_ppuscroll(a);
-    lda(*Mirror_PPU_CTRL_REG1);         // load saved mirror of $2000
-    pha();
+    a = *Mirror_PPU_CTRL_REG1;          // load saved mirror of $2000
+    *(sp--) = a;
     ppu_write_ppuctrl(a);
-    lda(*GamePauseStatus);              // if in pause mode, do not perform operation mode stuff
-    lsr(a);
-    bcs(SkipMainOper);
+    a = *GamePauseStatus;               // if in pause mode, do not perform operation mode stuff
+    c = (a & 0x01) ? true : false; a >>= 1;
+    if (c) goto SkipMainOper;
     OperModeExecutionTree();            // otherwise do one of many, many possible subroutines
 SkipMainOper:
-    lda(ppu_read_ppustatus());          // reset flip-flop
-    pla();
-    ora(0x80);                          // reactivate NMIs
+    a = ppu_read_ppustatus();           // reset flip-flop
+    a = *(++sp);
+    a |= 0x80;                          // reactivate NMIs
     ppu_write_ppuctrl(a);
-    // rti();                           // we are done until the next frame!
+    // rti                              // we are done until the next frame!
 }
 
 // $8182
@@ -944,37 +947,39 @@ void OperModeExecutionTree(void) {
 }
 
 // $8220
+// inputs:              none
+// possible outputs:    a, y, n, z, v
 void MoveAllSpritesOffscreen(void) {
-    uint8_t a, x, y;
-    bool c, z, v, n;
+    uint8_t a, y;
 
-    ldy(0x00);                  // this routine moves all sprites off the screen
-    bit(memory[0x04a0]);        // BIT instruction opcode
-    lda(0xf8);
+    y = 0x00;                   // this routine moves all sprites off the screen
+    // bit $04a0                // BIT instruction opcode
+    a = 0xf8;
 SprInitLoop:
-    sta(Sprite_Y_Position[y]);  // write 248 into OAM data's Y coordinate
-    iny();                      // which will move it off the screen
-    iny();
-    iny();
-    iny();
-    bne(SprInitLoop);
+    Sprite_Y_Position[y] = a;   // write 248 into OAM data's Y coordinate
+    ++y;                        // which will move it off the screen
+    ++y;
+    ++y;
+    ++y;
+    if (y) goto SprInitLoop;
     // rts
 }
 
 // $8223
+// inputs:              none
+// possible outputs:    a, y, n, z
 void MoveSpritesOffscreen(void) {
-    uint8_t a, x, y;
-    bool c, z, v, n;
+    uint8_t a, y;
 
-    ldy(0x04);                  // this routine moves all but sprite 0
-    lda(0xf8);                  // off the screen
+    y = 0x04;                   // this routine moves all but sprite 0
+    a = 0xf8;                   // off the screen
 SprInitLoop:
-    sta(Sprite_Y_Position[y]);  // write 248 into OAM data's Y coordinate
-    iny();                      // which will move it off the screen
-    iny();
-    iny();
-    iny();
-    bne(SprInitLoop);
+    Sprite_Y_Position[y] = a;   // write 248 into OAM data's Y coordinate
+    ++y;                        // which will move it off the screen
+    ++y;
+    ++y;
+    ++y;
+    if (y) goto SprInitLoop;
     // rts
 }
 
@@ -1123,62 +1128,61 @@ const uint8_t WorldSelectMessage2[0x15] = {
 
 // $8e19
 void InitializeNameTables(void) {
-    uint8_t a, x, y;
-    bool c, z, v, n;
+    uint8_t a;
 
-    lda(ppu_read_ppustatus());  // reset flip-flop
-    lda(*Mirror_PPU_CTRL_REG1); // load mirror of ppu reg $2000
-    ora(0x10);                  // set sprites for first 4k and background for second 4k
-    and(0xf0);                  // clear rest of lower nybble, leave higher alone
+    a = ppu_read_ppustatus();   // reset flip-flop
+    a = *Mirror_PPU_CTRL_REG1;  // load mirror of ppu reg $2000
+    a |= 0x10;                  // set sprites for first 4k and background for second 4k
+    a &= 0xf0;                  // clear rest of lower nybble, leave higher alone
     WritePPUReg1(a);
-    lda(0x24);                  // set vram address to start of name table 1
+    a = 0x24;                   // set vram address to start of name table 1
     WriteNTAddr(a);
-    lda(0x20);                  // and then set it to name table 0
+    a = 0x20;                   // and then set it to name table 0
     WriteNTAddr(a);
 }
 
 // $8e2d
+// inputs:              a
+// possible outputs:    a, x, y, n, z
 void WriteNTAddr(uint8_t a) {
     uint8_t x, y;
-    bool c, z, v, n;
 
     ppu_write_ppuaddr(a);
-    lda(0x00);
+    a = 0x00;
     ppu_write_ppuaddr(a);
-    ldx(0x04);                  // clear name table with blank tile #24
-    ldy(0xc0);
-    lda(0x24);
+    x = 0x04;                   // clear name table with blank tile #24
+    y = 0xc0;
+    a = 0x24;
 InitNTLoop:
     ppu_write_ppudata(a);       // count out exactly 768 tiles
-    dey();
-    bne(InitNTLoop);
-    dex();
-    bne(InitNTLoop);
-    ldy(64);                    // now to clear the attribute table (with zero this time)
-    txa();
-    sta(*VRAM_Buffer1_Offset);  // init vram buffer 1 offset
-    sta(*VRAM_Buffer1);         // init vram buffer 1
+    --y;
+    if (y) goto InitNTLoop;
+    --x;
+    if (x) goto InitNTLoop;
+    y = 64;                     // now to clear the attribute table (with zero this time)
+    a = x;
+    *VRAM_Buffer1_Offset = a;   // init vram buffer 1 offset
+    *VRAM_Buffer1 = a;          // init vram buffer 1
 InitATLoop:
     ppu_write_ppudata(a);
-    dey();
-    bne(InitATLoop);
-    sta(*HorizontalScroll);     // reset scroll variables
-    sta(*VerticalScroll);
+    --y;
+    if (y) goto InitATLoop;
+    *HorizontalScroll = a;      // reset scroll variables
+    *VerticalScroll = a;
     InitScroll(a);              // initialize scroll registers to zero
 }
 
 // $8e5c
 void ReadJoypads(void) {
-    uint8_t a, x, y;
-    bool c, z, v, n;
+    uint8_t a, x;
 
-    lda(0x01);                  // reset and clear strobe of joypad ports
+    a = 0x01;                   // reset and clear strobe of joypad ports
     cpu_write_joy1(a);
-    lsr(a);
-    tax();                      // start with joypad 1's port
+    a >>= 1;
+    x = a;                      // start with joypad 1's port
     cpu_write_joy1(a);
     ReadPortBits(x);
-    inx();                      // increment for joypad 2's port
+    ++x;                        // increment for joypad 2's port
     ReadPortBits(x);
 }
 
@@ -1188,35 +1192,37 @@ void ReadPortBits(uint8_t x) {
     };
 
     uint8_t a, y;
-    bool c, z, v, n;
+    uint8_t m0;
+    bool c, ct;
+    
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
 
-    ldy(0x08);
+    y = 0x08;
 PortLoop:
-    pha();                      // push previous bit onto stack
-    lda(cpu_read_joy[x]());     // read current bit on joypad port
-    sta(memory[0x00]);          // check d1 and d0 of port output
-    lsr(a);                     // this is necessary on the old
-    ora(memory[0x00]);          // famicom systems in japan
-    lsr(a);
-    pla();                      // read bits from stack
-    rol(a);                     // rotate bit from carry flag
-    dey();
-    bne(PortLoop);              // count down bits left
-    sta(SavedJoypadBits[x]);    // save controller status here always
-    pha();
-    and(0x30);                  // check for select or start
-    and(JoypadBitMask[x]);      // if neither saved state nor current state
-    beq(Save8Bits);             // have any of these two set, branch
-    pla();
-    and(0xcf);                  // otherwise store without select
-    sta(SavedJoypadBits[x]);    // or start bits and leave
-    return; // rts();
+    *(sp--) = a;                // push previous bit onto stack
+    a = cpu_read_joy[x]();      // read current bit on joypad port
+    m0 = a;                     // check d1 and d0 of port output
+    a >>= 1;                    // this is necessary on the old
+    a |= m0;                    // famicom systems in japan
+    c = (a & 0x01) ? true : false; a >>= 1;
+    a = *(++sp);                // read bits from stack
+    ct = c; c = (a & 0x80) ? true : false; a = (a << 1) | (ct ? 0x01 : 0x00);   // rotate bit from carry flag
+    --y;
+    if (y) goto PortLoop;       // count down bits left
+    SavedJoypadBits[x] = a;     // save controller status here always
+    *(sp--) = a;
+    a &= 0x30;                  // check for select or start
+    a &= JoypadBitMask[x];      // if neither saved state nor current state
+    if (!a) goto Save8Bits;     // have any of these two set, branch
+    a = *(++sp);
+    a &= 0xcf;                  // otherwise store without select
+    a = SavedJoypadBits[x];     // or start bits and leave
+    return;
 Save8Bits:
-    pla();
-    sta(JoypadBitMask[x]);      // save with all bits in another place and leave
-    // rts();
+    a = *(++sp);
+    JoypadBitMask[x] = a;       // save with all bits in another place and leave
+    // rts
 }
 
 // $8edd
@@ -1284,6 +1290,8 @@ UpdateScreen:
 }
 
 // $8ee6
+// inputs:  a
+// outputs: none
 void InitScroll(uint8_t a) {
     ppu_write_ppuscroll(a); // store contents of A into scroll registers
     ppu_write_ppuscroll(a); // and end whatever subroutine led us here
