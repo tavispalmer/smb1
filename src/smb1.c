@@ -796,8 +796,6 @@ uint8_t VRAM_Buffer_Offset[0x02] = {
     0x00, 0x00
 };
 
-#include <stdio.h>
-
 // $8082
 void NonMaskableInterrupt(void) {
     uint8_t a, x, y;
@@ -1194,7 +1192,7 @@ void ReadPortBits(uint8_t x) {
     uint8_t a, y;
     uint8_t m0;
     bool c, ct;
-    
+
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
 
