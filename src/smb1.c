@@ -736,47 +736,48 @@ const uint8_t GameOverModeValue     = 3;
 // $8000
 void Start(void) {
     uint8_t a, x, y;
+    bool n, z, c;
 
     // sei                      // pretty standard 6502 type init here
     // cld
-    a = 0x10;                   // init PPU control register 1
+    lda(0x10);                  // init PPU control register 1
     ppu_write_ppuctrl(a);
-    x = 0xff;                   // reset stack pointer
+    ldx(0xff);                  // reset stack pointer
     sp = x;
 // VBlank1:
-    a = ppu_read_ppustatus();   // wait two frames
+    lda(ppu_read_ppustatus());  // wait two frames
     // bpl VBlank1
 // VBlank2:
-    a = ppu_read_ppustatus();
+    lda(ppu_read_ppustatus());
     // bpl VBlank2
-    y = ColdBootOffset;         // load default cold boot pointer
-    x = 0x05;                   // this is where we check for a warm boot
+    ldy(ColdBootOffset);        // load default cold boot pointer
+    ldx(0x05);                  // this is where we check for a warm boot
 WBootCheck:
-    a = TopScoreDisplay[x];     // check each score digit in the top score
-    if ((int8_t)a >= 10)                // to see if we have a valid digit
-        goto ColdBoot;          // if not, give up and proceed with cold boot
-    --x;
-    if ((int8_t)x >= 0) goto WBootCheck;
-    a = *WarmBootValidation;    // second checkpoint, check to see if
-    if (a != 0xa5)              // another location has a specific value
-        goto ColdBoot;
-    y = WarmBootOffset;         // if passed both, load warm boot pointer
+    lda(TopScoreDisplay[x]);    // check each score digit in the top score
+    cmp(10);                    // to see if we have a valid digit
+    bcs(ColdBoot);              // if not, give up and proceed with cold boot
+    dex();
+    bpl(WBootCheck);
+    lda(*WarmBootValidation);   // second checkpoint, check to see if
+    cmp(0xa5);                  // another location has a specific value
+    bne(ColdBoot);
+    ldy(WarmBootOffset);        // if passed both, load warm boot pointer
 ColdBoot:
     a = InitializeMemory(y);    // clear memory using pointer in Y
     apu_write_dmc_raw(a);       // reset delta counter load register
-    *OperMode = a;              // reset primary mode of operation
-    a = 0xa5;                   // set warm boot flag
-    *WarmBootValidation = a;
-    *PseudoRandomBitReg = a;    // set seed for pseudorandom register
-    a = 0x0f;
+    sta(*OperMode);             // reset primary mode of operation
+    lda(0xa5);                  // set warm boot flag
+    sta(*WarmBootValidation);
+    sta(*PseudoRandomBitReg);   // set seed for pseudorandom register
+    lda(0x0f);
     apu_write_snd_chn(a);       // enable all sound channels except dmc
-    a = 0x06;
+    lda(0x06);
     ppu_write_ppumask(a);       // turn off clipping for OAM and background
     MoveAllSpritesOffscreen();
     InitializeNameTables();     // initialize both name tables
-    ++*DisableScreenFlag;       // set flag to disable screen output
-    a = *Mirror_PPU_CTRL_REG1;
-    a |= 0x80;                  // enable NMIs
+    inc(*DisableScreenFlag);    // set flag to disable screen output
+    lda(*Mirror_PPU_CTRL_REG1);
+    ora(0x80);                  // enable NMIs
     WritePPUReg1(a);
 // EndlessLoop:
     // jmp EndlessLoop          // endless loop, need I say more?
@@ -800,142 +801,228 @@ uint8_t VRAM_Buffer_Offset[0x02] = {
 void NonMaskableInterrupt(void) {
     uint8_t a, x, y;
     uint8_t m0;
-    bool c, ct;
+    bool n, z, c;
 
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
 
-    a = *Mirror_PPU_CTRL_REG1;          // disable NMIs in mirror reg
-    a &= 0x7f;                          // save all other bits
-    *Mirror_PPU_CTRL_REG1 = a;
-    a &= 0x7e;                          // alter name table address to be $2800
+    lda(*Mirror_PPU_CTRL_REG1);         // disable NMIs in mirror reg
+    and(0x7f);                          // save all other bits
+    sta(*Mirror_PPU_CTRL_REG1);
+    and(0x7e);                          // alter name table address to be $2800
     ppu_write_ppuctrl(a);               // (essentially $2000) but save other bits
-    a = *Mirror_PPU_CTRL_REG2;          // disable OAM and background display by default
-    a &= 0xe6;
-    y = *DisableScreenFlag;             // get screen disable flag
-    if (y) goto ScreenOff;              // if set, used bits as-is
-    a = *Mirror_PPU_CTRL_REG2;          // otherwise reenable bits and save them
-    a |= 0x1e;
+    lda(*Mirror_PPU_CTRL_REG2);         // disable OAM and background display by default
+    and(0xe6);
+    ldy(*DisableScreenFlag);            // get screen disable flag
+    bne(ScreenOff);                     // if set, used bits as-is
+    lda(*Mirror_PPU_CTRL_REG2);         // otherwise reenable bits and save them
+    ora(0x1e);
 ScreenOff:
-    *Mirror_PPU_CTRL_REG2 = a;          // save bits for later but not in register at the moment
-    a &= 0xe7;                          // disable screen for now
+    sta(*Mirror_PPU_CTRL_REG2);         // save bits for later but not in register at the moment
+    and(0xe7);                          // disable screen for now
     ppu_write_ppumask(a);
-    x = ppu_read_ppustatus();          // reset flip-flop and reset scroll registers to zero
-    a = 0x00;
+    ldx(ppu_read_ppustatus());          // reset flip-flop and reset scroll registers to zero
+    lda(0x00);
     InitScroll(a);
     ppu_write_oamaddr(a);               // reset spr-ram address register
-    a = 0x02;                           // perform spr-ram DMA access on $0200-$02ff
+    lda(0x02);                          // perform spr-ram DMA access on $0200-$02ff
     cpu_write_oamdma(a);
-    x = *VRAM_Buffer_AddrCtrl;          // load control for pointer to buffer contents
+    ldx(*VRAM_Buffer_AddrCtrl);         // load control for pointer to buffer contents
                                         // set indirect at $00 to pointer
     UpdateScreen(VRAM_AddrTable[x]);    // update screen with buffer contents
-    y = 0x00;
-    x = *VRAM_Buffer_AddrCtrl;          // check for usage of $0341
-    if (x != 0x06)
-        goto InitBuffer;
-    ++y;                                // get offset based on usage
+    ldy(0x00);
+    ldx(*VRAM_Buffer_AddrCtrl);         // check for usage of $0341
+    cpx(0x06);
+    bne(InitBuffer);
+    iny();                              // get offset based on usage
 InitBuffer:
-    x = VRAM_Buffer_Offset[y];
-    a = 0x00;                           // clear buffer header at last location
-    VRAM_Buffer1_Offset[x] = a;
-    VRAM_Buffer1[x] = a;
-    *VRAM_Buffer_AddrCtrl = a;          // reinit address control to $0301
-    a = *Mirror_PPU_CTRL_REG2;          // copy mirror of $2001 to register
+    ldx(VRAM_Buffer_Offset[y]);
+    lda(0x00);                          // clear buffer header at last location
+    sta(VRAM_Buffer1_Offset[x]);
+    sta(VRAM_Buffer1[x]);
+    sta(*VRAM_Buffer_AddrCtrl);         // reinit address control to $0301
+    lda(*Mirror_PPU_CTRL_REG2);         // copy mirror of $2001 to register
     ppu_write_ppumask(a);
     SoundEngine();                      // play sound
     ReadJoypads();                      // read joypads
     PauseRoutine();                     // handle pause
     UpdateTopScore();
-    a = *GamePauseStatus;               // check for pause status
-    c = (a & 0x01) ? true : false; a >>= 1;
-    if (c) goto PauseSkip;
-    a = *TimerControl;                  // if master timer control not set, decrement
-    if (!a) goto DecTimers;             // all frame and interval timers
-    --*TimerControl;
-    if (*TimerControl) goto NoDecTimers;
+    lda(*GamePauseStatus);              // check for pause status
+    lsr(a);
+    bcs(PauseSkip);
+    lda(*TimerControl);                 // if master timer control not set, decrement
+    beq(DecTimers);                     // all frame and interval timers
+    dec(*TimerControl);
+    bne(NoDecTimers);
 DecTimers:
-    x = 0x14;                           // load end offset for end of frame timers
-    --*IntervalTimerControl;            // decrement interval timer control,
-    if ((int8_t)*IntervalTimerControl >= 0) goto DecTimersLoop; // if not expired, only frame timers will decrement
-    a = 0x14;
-    *IntervalTimerControl = a;          // if control for interval timers expired,
-    x = 0x23;                           // interval timers will decrement along with frame timers
+    ldx(0x14);                          // load end offset for end of frame timers
+    dec(*IntervalTimerControl);         // decrement interval timer control,
+    bpl(DecTimersLoop);                 // if not expired, only frame timers will decrement
+    lda(0x14);
+    sta(*IntervalTimerControl);         // if control for interval timers expired,
+    ldx(0x23);                          // interval timers will decrement along with frame timers
 DecTimersLoop:
-    a = Timers[x];                      // check current timer
-    if (!a) goto SkipExpTimer;          // if current timer expired, branch to skip,
-    --Timers[x];                        // otherwise decrement the current timer
+    lda(Timers[x]);                     // check current timer
+    beq(SkipExpTimer);                  // if current timer expired, branch to skip,
+    dec(Timers[x]);                     // otherwise decrement the current timer
 SkipExpTimer:
-    --x;                                // move onto next timer
-    if ((int8_t)x >= 0) goto DecTimersLoop;     // do this until all timers are dealt with
+    dex();                              // move onto next timer
+    bpl(DecTimersLoop);                 // do this until all timers are dealt with
 NoDecTimers:
-    ++*FrameCounter;                    // increment frame counter
+    inc(*FrameCounter);                 // increment frame counter
 PauseSkip:
-    x = 0x00;
-    y = 0x07;
-    a = *PseudoRandomBitReg;            // get first memory location of LSFR bytes
-    a &= 0x02;                          // mask out all but d1
-    m0 = a;                             // save here
-    a = PseudoRandomBitReg[1];          // get second memory location
-    a &= 0x02;                          // mask out all but d1
-    a ^= m0;                            // perform exclusive-OR on d1 from first and second bytes
-    c = false;                          // if neither or both are set, carry will be clear
-    if (!a) goto RotPRandomBit;
-    c = true;                           // if one or the other is set, carry will be set
+    ldx(0x00);
+    ldy(0x07);
+    lda(*PseudoRandomBitReg);           // get first memory location of LSFR bytes
+    and(0x02);                          // mask out all but d1
+    sta(m0);                            // save here
+    lda(PseudoRandomBitReg[1]);         // get second memory location
+    and(0x02);                          // mask out all but d1
+    eor(m0);                            // perform exclusive-OR on d1 from first and second bytes
+    clc();                              // if neither or both are set, carry will be clear
+    beq(RotPRandomBit);
+    sec();                              // if one or the other is set, carry will be set
 RotPRandomBit:
-    ct = c; c = (PseudoRandomBitReg[x] & 0x01) ? true : false; PseudoRandomBitReg[x] = (PseudoRandomBitReg[x] >> 1) | (ct ? 0x80 : 0x00); // rotate carry into d7, and rotate last bit into carry
-    ++x;                                // increment to next byte
-    --y;                                // decrement for loop
-    if (y) goto RotPRandomBit;
-    a = *Sprite0HitDetectFlag;          // check for flag here
-    if (!a) goto SkipSprite0;
+    ror(PseudoRandomBitReg[x]);         // rotate carry into d7, and rotate last bit into carry
+    inx();                              // increment to next byte
+    dey();                              // decrement for loop
+    bne(RotPRandomBit);
+    lda(*Sprite0HitDetectFlag);         // check for flag here
+    beq(SkipSprite0);
 Sprite0Clr:
-    a = ppu_read_ppustatus();           // wait for sprite 0 flag to clear, which will
+    lda(ppu_read_ppustatus());          // wait for sprite 0 flag to clear, which will
     // and #%01000000                   // not happen until vblank has ended
     // bne Sprite0Clr
-    a = *GamePauseStatus;               // if in pause mode, do not bother with sprites at all
-    c = (a & 0x01) ? true : false; a >>= 1;
-    if (c) goto Sprite0Hit;
+    lda(*GamePauseStatus);              // if in pause mode, do not bother with sprites at all
+    lsr(a);
+    bcs(Sprite0Hit);
     MoveSpritesOffscreen();
     SpriteShuffler();
 Sprite0Hit:
-    a = ppu_read_ppustatus();           // do sprite #0 hit detection
+    lda(ppu_read_ppustatus());          // do sprite #0 hit detection
     // and #%01000000
     // beq Sprite0Hit
     ppu_draw(0x1f);
-    y = 0x14;                           // small delay, to wait until we hit horizontal blank time
+    ldy(0x14);                          // small delay, to wait until we hit horizontal blank time
 HBlankDelay:
-    --y;
-    if (y) goto HBlankDelay;
+    dey();
+    bne(HBlankDelay);
 SkipSprite0:
-    a = *HorizontalScroll;              // set scroll registers from variables
+    lda(*HorizontalScroll);             // set scroll registers from variables
     ppu_write_ppuscroll(a);
-    a = *VerticalScroll;
+    lda(*VerticalScroll);
     ppu_write_ppuscroll(a);
-    a = *Mirror_PPU_CTRL_REG1;          // load saved mirror of $2000
-    *(sp--) = a;
+    lda(*Mirror_PPU_CTRL_REG1);         // load saved mirror of $2000
+    pha();
     ppu_write_ppuctrl(a);
-    a = *GamePauseStatus;               // if in pause mode, do not perform operation mode stuff
-    c = (a & 0x01) ? true : false; a >>= 1;
-    if (c) goto SkipMainOper;
+    lda(*GamePauseStatus);              // if in pause mode, do not perform operation mode stuff
+    lsr(a);
+    bcs(SkipMainOper);
     OperModeExecutionTree();            // otherwise do one of many, many possible subroutines
 SkipMainOper:
-    a = ppu_read_ppustatus();           // reset flip-flop
-    a = *(++sp);
-    a |= 0x80;                          // reactivate NMIs
+    lda(ppu_read_ppustatus());          // reset flip-flop
+    pla();
+    ora(0x80);                          // reactivate NMIs
     ppu_write_ppuctrl(a);
     // rti                              // we are done until the next frame!
 }
 
-// $8182
+// inputs:              none
+// possible outputs:    a, y, n, z, c
 void PauseRoutine(void) {
-    pc = 0x8182;
-    cpu_execute();
+    uint8_t a, y;
+    bool n, z, c;
+
+PauseRoutine:
+    lda(*OperMode);         // are we in victory mode?
+    cmp(VictoryModeValue);  // if so, go ahead
+    beq(ChkPauseTimer);
+    cmp(GameModeValue);     // are we in game mode?
+    bne(ExitPause);         // if not, leave
+    lda(*OperMode_Task);    // if we are in game mode, are we running game engine?
+    cmp(0x03);
+    bne(ExitPause);         // if not, leave
+ChkPauseTimer:
+    lda(*GamePauseTimer);   // check if pause timer is still counting down
+    beq(ChkStart);
+    dec(*GamePauseTimer);   // if so, decrement and leave
+    return;
+ChkStart:
+    lda(*SavedJoypad1Bits); // check to see if start is pressed
+    and(Start_Button);      // on controller 1
+    beq(ClrPauseTimer);
+    lda(*GamePauseStatus);  // check to see if timer flag is set
+    and(0x80);              // and if so, do not reset timer (residual,
+    bne(ExitPause);         // joypad reading routine makes this unnecessary)
+    lda(0x2b);              // set pause timer
+    sta(*GamePauseTimer);
+    lda(*GamePauseStatus);
+    tay();
+    iny();                  // set pause sfx queue for next pause mode
+    sty(*PauseSoundQueue);
+    eor(0x01);              // invert d0 and set d7
+    ora(0x80);
+    bne(SetPause);          // unconditional branch
+ClrPauseTimer:
+    lda(*GamePauseStatus)   // clear timer flag if timer is at zero and start button
+    and(0x7f);              // is not pressed
+SetPause:
+    sta(*GamePauseStatus);
+ExitPause:
+    // rts
 }
 
-// $81c6
+// inputs:              none
+// possible outputs:    a, x, y, n, v, z, c
 void SpriteShuffler(void) {
-    pc = 0x81c6;
-    cpu_execute();
+    uint8_t a, x, y;
+    bool n, v, z, c;
+    uint8_t m0;
+
+SpriteShuffler:
+    ldy(*AreaType);                 // load level type, likely residual code
+    lda(0x28);                      // load preset value which will put it at
+    sta(m0);                        // sprite #10
+    ldx(0x0e);                      // start at the end of OAM data offsets
+ShuffleLoop:
+    lda(SprDataOffset[x]);          // check for offset value against
+    cmp(m0);                        // the preset value
+    bcc(NextSprOffset);             // if less, skip this part
+    ldy(*SprShuffleAmtOffset);      // get current offset to preset value we want to add
+    clc();
+    adc(SprShuffleAmt[y]);          // get shuffle amount, add to current sprite offset
+    bcc(StrSprOffset);              // if not exceeded $ff, skip second add
+    clc();
+    adc(m0);                        // otherwise add preset value $28 to offset
+StrSprOffset:
+    sta(SprDataOffset[x]);          // store new offset here or old one if branched to here
+NextSprOffset:
+    dex();                          // move backwards to next one
+    bpl(ShuffleLoop);
+    ldx(*SprShuffleAmtOffset);      // load offset
+    inx();
+    cpx(0x03);                      // check if offset + 1 goes to 3
+    bne(SetAmtOffset);              // if offset + 1 not 3, store
+    ldx(0x00);                      // otherwise, init to 0
+SetAmtOffset:
+    stx(*SprShuffleAmtOffset);
+    ldx(0x08);                      // load offsets for values and storage
+    ldy(0x02);
+SetMiscOffset:
+    lda(SprDataOffset[y+5]);        // load one of three OAM data offsets
+    sta(Misc_SprDataOffset[x-2]);   // store first one unmodified, but
+    clc();                          // add eight to the second and eight
+    adc(0x08);                      // more to the third one
+    sta(Misc_SprDataOffset[x-1]);   // note that due to the way X is set up,
+    clc();                          // this code loads into the misc sprite offsets
+    adc(0x08);
+    sta(Misc_SprDataOffset[x]);        
+    dex();
+    dex();
+    dex();
+    dey();
+    bpl(SetMiscOffset);             // do this until all misc spr offsets are loaded
+    // rts
 }
 
 // $8212
@@ -946,20 +1033,21 @@ void OperModeExecutionTree(void) {
 
 // $8220
 // inputs:              none
-// possible outputs:    a, y, n, z, v
+// possible outputs:    a, y, n, z
 void MoveAllSpritesOffscreen(void) {
     uint8_t a, y;
+    bool n, z;
 
-    y = 0x00;                   // this routine moves all sprites off the screen
+    ldy(0x00);                  // this routine moves all sprites off the screen
     // bit $04a0                // BIT instruction opcode
-    a = 0xf8;
+    lda(0xf8);
 SprInitLoop:
-    Sprite_Y_Position[y] = a;   // write 248 into OAM data's Y coordinate
-    ++y;                        // which will move it off the screen
-    ++y;
-    ++y;
-    ++y;
-    if (y) goto SprInitLoop;
+    sta(Sprite_Y_Position[y]);  // write 248 into OAM data's Y coordinate
+    iny();                      // which will move it off the screen
+    iny();
+    iny();
+    iny();
+    bne(SprInitLoop);
     // rts
 }
 
@@ -968,16 +1056,17 @@ SprInitLoop:
 // possible outputs:    a, y, n, z
 void MoveSpritesOffscreen(void) {
     uint8_t a, y;
+    bool n, z;
 
-    y = 0x04;                   // this routine moves all but sprite 0
-    a = 0xf8;                   // off the screen
+    ldy(0x04);                  // this routine moves all but sprite 0
+    lda(0xf8);                  // off the screen
 SprInitLoop:
-    Sprite_Y_Position[y] = a;   // write 248 into OAM data's Y coordinate
-    ++y;                        // which will move it off the screen
-    ++y;
-    ++y;
-    ++y;
-    if (y) goto SprInitLoop;
+    sta(Sprite_Y_Position[y]);  // write 248 into OAM data's Y coordinate
+    iny();                      // which will move it off the screen
+    iny();
+    iny();
+    iny();
+    bne(SprInitLoop);
     // rts
 }
 
@@ -1127,15 +1216,16 @@ const uint8_t WorldSelectMessage2[0x15] = {
 // $8e19
 void InitializeNameTables(void) {
     uint8_t a;
+    bool n, z;
 
-    a = ppu_read_ppustatus();   // reset flip-flop
-    a = *Mirror_PPU_CTRL_REG1;  // load mirror of ppu reg $2000
-    a |= 0x10;                  // set sprites for first 4k and background for second 4k
-    a &= 0xf0;                  // clear rest of lower nybble, leave higher alone
+    lda(ppu_read_ppustatus());  // reset flip-flop
+    lda(*Mirror_PPU_CTRL_REG1); // load mirror of ppu reg $2000
+    ora(0x10);                  // set sprites for first 4k and background for second 4k
+    and(0xf0);                  // clear rest of lower nybble, leave higher alone
     WritePPUReg1(a);
-    a = 0x24;                   // set vram address to start of name table 1
+    lda(0x24);                  // set vram address to start of name table 1
     WriteNTAddr(a);
-    a = 0x20;                   // and then set it to name table 0
+    lda(0x20);                  // and then set it to name table 0
     WriteNTAddr(a);
 }
 
@@ -1144,89 +1234,95 @@ void InitializeNameTables(void) {
 // possible outputs:    a, x, y, n, z
 void WriteNTAddr(uint8_t a) {
     uint8_t x, y;
+    bool n, z;
 
     ppu_write_ppuaddr(a);
-    a = 0x00;
+    lda(0x00);
     ppu_write_ppuaddr(a);
-    x = 0x04;                   // clear name table with blank tile #24
-    y = 0xc0;
-    a = 0x24;
+    ldx(0x04);                  // clear name table with blank tile #24
+    ldy(0xc0);
+    lda(0x24);
 InitNTLoop:
     ppu_write_ppudata(a);       // count out exactly 768 tiles
-    --y;
-    if (y) goto InitNTLoop;
-    --x;
-    if (x) goto InitNTLoop;
-    y = 64;                     // now to clear the attribute table (with zero this time)
-    a = x;
-    *VRAM_Buffer1_Offset = a;   // init vram buffer 1 offset
-    *VRAM_Buffer1 = a;          // init vram buffer 1
+    dey();
+    bne(InitNTLoop);
+    dex();
+    bne(InitNTLoop);
+    ldy(64);                    // now to clear the attribute table (with zero this time)
+    txa();
+    sta(*VRAM_Buffer1_Offset);  // init vram buffer 1 offset
+    sta(*VRAM_Buffer1);         // init vram buffer 1
 InitATLoop:
     ppu_write_ppudata(a);
-    --y;
-    if (y) goto InitATLoop;
-    *HorizontalScroll = a;      // reset scroll variables
-    *VerticalScroll = a;
+    dey();
+    bne(InitATLoop);
+    sta(*HorizontalScroll);     // reset scroll variables
+    sta(*VerticalScroll);
     InitScroll(a);              // initialize scroll registers to zero
 }
 
 // $8e5c
 void ReadJoypads(void) {
     uint8_t a, x;
+    bool n, z, c;
 
-    a = 0x01;                   // reset and clear strobe of joypad ports
+    lda(0x01);                  // reset and clear strobe of joypad ports
     cpu_write_joy1(a);
-    a >>= 1;
-    x = a;                      // start with joypad 1's port
+    lsr(a);
+    tax();                      // start with joypad 1's port
     cpu_write_joy1(a);
     ReadPortBits(x);
-    ++x;                        // increment for joypad 2's port
+    inx();                      // increment for joypad 2's port
     ReadPortBits(x);
 }
 
+// inputs:              x
+// possible outputs:    a, x, y, n, z, c
 void ReadPortBits(uint8_t x) {
     static const uint8_t (*cpu_read_joy[2])(void) = {
         cpu_read_joy1, cpu_read_joy2
     };
 
     uint8_t a, y;
+    bool n, z, c;
     uint8_t m0;
-    bool c, ct;
 
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
 
-    y = 0x08;
+    ldy(0x08);
 PortLoop:
-    *(sp--) = a;                // push previous bit onto stack
-    a = cpu_read_joy[x]();      // read current bit on joypad port
-    m0 = a;                     // check d1 and d0 of port output
-    a >>= 1;                    // this is necessary on the old
-    a |= m0;                    // famicom systems in japan
-    c = (a & 0x01) ? true : false; a >>= 1;
-    a = *(++sp);                // read bits from stack
-    ct = c; c = (a & 0x80) ? true : false; a = (a << 1) | (ct ? 0x01 : 0x00);   // rotate bit from carry flag
-    --y;
-    if (y) goto PortLoop;       // count down bits left
-    SavedJoypadBits[x] = a;     // save controller status here always
-    *(sp--) = a;
-    a &= 0x30;                  // check for select or start
-    a &= JoypadBitMask[x];      // if neither saved state nor current state
-    if (!a) goto Save8Bits;     // have any of these two set, branch
-    a = *(++sp);
-    a &= 0xcf;                  // otherwise store without select
-    a = SavedJoypadBits[x];     // or start bits and leave
+    pha();                      // push previous bit onto stack
+    lda(cpu_read_joy[x]());     // read current bit on joypad port
+    sta(m0);                    // check d1 and d0 of port output
+    lsr(a);                     // this is necessary on the old
+    ora(m0);                    // famicom systems in japan
+    lsr(a);
+    pla();                      // read bits from stack
+    rol(a);                     // rotate bit from carry flag
+    dey();
+    bne(PortLoop);              // count down bits left
+    sta(SavedJoypadBits[x]);    // save controller status here always
+    pha();
+    and(0x30);                  // check for select or start
+    and(JoypadBitMask[x]);      // if neither saved state nor current state
+    beq(Save8Bits);             // have any of these two set, branch
+    pla();
+    and(0xcf);                  // otherwise store without select
+    sta(SavedJoypadBits[x]);    // or start bits and leave
     return;
 Save8Bits:
-    a = *(++sp);
-    JoypadBitMask[x] = a;       // save with all bits in another place and leave
+    pla();
+    sta(JoypadBitMask[x]);      // save with all bits in another place and leave
     // rts
 }
 
 // $8edd
-void UpdateScreen(const uint8_t *address) {
+// inputs:              none
+// possible outputs:    a, x, y, n, z, c
+void UpdateScreen(const uint8_t *m0) {
     uint8_t a, x, y;
-    bool c, z, v, n;
+    bool n, v, z, c;
 
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
@@ -1236,10 +1332,10 @@ void UpdateScreen(const uint8_t *address) {
 WriteBufferToScreen:
     ppu_write_ppuaddr(a);       // store high byte of vram address
     iny();
-    lda(address[y]);            // load next byte (second)
+    lda(m0[y]);                 // load next byte (second)
     ppu_write_ppuaddr(a);       // store low byte of vram address
     iny();
-    lda(address[y]);            // load next byte (third)
+    lda(m0[y]);                 // load next byte (third)
     asl(a);                     // shift to left and save in stack
     pha();
     lda(*Mirror_PPU_CTRL_REG1); // load mirror of $2000,
@@ -1261,7 +1357,7 @@ OutputToVRAM:
     bcs(RepeatByte);            // if carry set, repeat loading the same byte
     iny();                      // otherwise increment Y to load next byte
 RepeatByte:
-    lda(address[y]);            // load more data from buffer and write to vram
+    lda(m0[y]);                 // load more data from buffer and write to vram
     ppu_write_ppudata(a);
     dex();                      // done writing?
     bne(OutputToVRAM);
@@ -1272,7 +1368,7 @@ RepeatByte:
     // lda #$00
     // adc $01
     // sta $01
-    address += a + (c ? 1 : 0);
+    m0 += a + (c ? 1 : 0);
     lda(0x3f);                  // sets vram address to $3f00
     ppu_write_ppuaddr(a);
     lda(0x00);
@@ -1282,7 +1378,7 @@ RepeatByte:
 UpdateScreen:
     ldx(ppu_read_ppustatus());  // reset flip-flop
     ldy(0x00);                  // load first byte from indirect as a pointer
-    lda(address[y]);
+    lda(m0[y]);
     bne(WriteBufferToScreen);   // if byte is zero we have no further updates to make here
     InitScroll(a);
 }
@@ -1295,6 +1391,8 @@ void InitScroll(uint8_t a) {
     ppu_write_ppuscroll(a); // and end whatever subroutine led us here
 }
 
+// inputs:  a
+// outputs: none
 void WritePPUReg1(uint8_t a) {
     ppu_write_ppuctrl(a);       // write contents of A to PPU register 1
     sta(*Mirror_PPU_CTRL_REG1); // and its mirror
@@ -1307,160 +1405,157 @@ void UpdateTopScore(void) {
 }
 
 // $90cc
-// a = 0
+// inputs:              y
+// possible outputs:    a, x, y, n, z, c
 uint8_t InitializeMemory(uint8_t y) {
     uint8_t a, x;
-    bool c, z, v, n;
+    bool n, z, c;
+    uint8_t m6, m7;
 
-    ldx(0x07);          // set initial high byte to $0700-$07ff
-    lda(0x00);          // set initial low byte to start of page (at $00 of page)
-    sta(memory[0x06]);
+    ldx(0x07);                      // set initial high byte to $0700-$07ff
+    lda(0x00);                      // set initial low byte to start of page (at $00 of page)
+    sta(m6);
 InitPageLoop:
-    stx(memory[0x07]);
+    stx(m7);
 InitByteLoop:
-    cpx(0x01);          // check to see if we're on the stack ($0100-$01ff)
-    bne(InitByte);      // if not, go ahead anyway
-    cpy(0x60);          // otherwise, check to see if we're at $0160-$01ff
-    bcs(SkipByte);      // if so, skip write
+    cpx(0x01);                      // check to see if we're on the stack ($0100-$01ff)
+    bne(InitByte);                  // if not, go ahead anyway
+    cpy(0x60);                      // otherwise, check to see if we're at $0160-$01ff
+    bcs(SkipByte);                  // if so, skip write
 InitByte:
-    sta(memory[(memory[0x06]|(memory[0x07]<<8))+y]);    // otherwise, initialize byte with current low byte in Y
+    sta(memory[(m6|(m7<<8))+y]);    // otherwise, initialize byte with current low byte in Y
 SkipByte:
     dey();
-    cpy(0xff);          // do this until all bytes in page have been erased
+    cpy(0xff);                      // do this until all bytes in page have been erased
     bne(InitByteLoop);
-    dex();              // go onto the next page
-    bpl(InitPageLoop);  // do this until all pages of memory have been erased
+    dex();                          // go onto the next page
+    bpl(InitPageLoop);              // do this until all pages of memory have been erased
+    return a;
 }
 
 // $f2d0
+// inputs:              none
+// possible outputs:    a, x, y, n, z, c
 void SoundEngine(void) {
-    uint8_t a, y;
+    uint8_t a, x, y;
+    bool n, z, c;
 
-    // are we in title screen mode?
-    if (!*OperMode) {
-        // if so, disable sound and leave
-        apu_write_snd_chn(0x00);
-    } else {
-        // disable irqs and set frame counter mode???
-        apu_write_joy2(0xff);
-        // enable first four channels
-        apu_write_snd_chn(0x0f);
-        // is sound already in pause mode?
-        // if not, check pause sfx queue
-        // if queue is empty, skip pause mode routine
-        if (*PauseModeFlag || (*PauseSoundQueue == 0x01)) {
-            // check pause sfx buffer
-            if (!*PauseSoundBuffer) {
-                // check pause queue
-                a = *PauseSoundQueue;
-                if (!a) {
-                    goto SkipSoundSubroutines;
-                }
-                // if queue full, store in buffer and activvate
-                // pause mode to interrupt game sounds
-                *PauseSoundBuffer = a;
-                *PauseModeFlag = a;
-                // disable sound and clear sfx buffers
-                apu_write_snd_chn(0x00);
-                *Square1SoundBuffer = 0x00;
-                *Square2SoundBuffer = 0x00;
-                *NoiseSoundBuffer = 0x00;
-                // enable sound again
-                apu_write_snd_chn(0x0f);
-                // store length of sound in pause counter
-                *Squ1_SfxLenCounter = 0x2a;
+    lda(*OperMode);             // are we in title screen mode?
+    bne(SndOn);
+    apu_write_snd_chn(a);       // if so, disable sound and leave
+    return;
+SndOn:
+    lda(0xff);
+    apu_write_joy2(a);          // disable irqs and set frame counter mode???
+    lda(0x0f);
+    apu_write_snd_chn(a);       // enable first four channels
+    lda(*PauseModeFlag);        // is sound already in pause mode?
+    bne(InPause);
+    lda(*PauseSoundQueue);      // if not, check pause sfx queue    
+    cmp(0x01);
+    bne(RunSoundSubroutines);   // if queue is empty, skip pause mode routine
+InPause:
+    lda(*PauseSoundBuffer);     // check pause sfx buffer
+    bne(ContPau);
+    lda(*PauseSoundQueue);      // check pause queue
+    beq(SkipSoundSubroutines);
+    sta(*PauseSoundBuffer);     // if queue full, store in buffer and activate
+    sta(*PauseModeFlag);        // pause mode to interrupt game sounds
+    lda(0x00);                  // disable sound and clear sfx buffers
+    apu_write_snd_chn(a);
+    sta(*Square1SoundBuffer);
+    sta(*Square2SoundBuffer);
+    sta(*NoiseSoundBuffer);
+    lda(0x0f);
+    apu_write_snd_chn(a);       // enable sound again
+    lda(0x2a);                  // store length of sound in pause counter
+    sta(*Squ1_SfxLenCounter);
 PTone1F:
-                // play first tone
-                a = 0x44;
-                // unconditional branch
-            } else {
-                // check pause length left
-                a = *Squ1_SfxLenCounter;
-                // time to play second?
-                if (a != 0x24) {
-                    // time to play first again?
-                    if (a == 0x1e) {
-                        goto PTone1F;
-                    }
-                    // time to play second again?
-                    if (a != 0x18) {
-                        // only load regs during times, otherwise skip
-                        goto DecPauC;
-                    }
-                }
-                // store reg contents and play the pause sfx
-                a = 0x64;
-            }
-            PlaySqu1Sfx(a, 0x84, 0x7f);
+    lda(0x44);                  // play first tone
+    bne(PTRegC);                // unconditional branch
+ContPau:
+    lda(*Squ1_SfxLenCounter);   // check pause length left
+    cmp(0x24);                  // time to play second?
+    beq(PTone2F);
+    cmp(0x1e);                  // time to play first again?
+    beq(PTone1F);
+    cmp(0x18);                  // time to play second again?
+    bne(DecPauC);               // only load regs during times, otherwise skip
+PTone2F:
+    lda(0x64);                  // store reg contents and play the pause sfx
+PTRegC:
+    ldx(0x84);
+    ldy(0x7f);
+    PlaySqu1Sfx(a, x, y);
 DecPauC:
-            // decrement pause sfx counter
-            if (!--*Squ1_SfxLenCounter) {
-                // disable sound if in pause mode and
-                // not currently playing the pause sfx
-                apu_write_snd_chn(0x00);
-                // if no longer playing pause sfx, check to see
-                // if we need to be playing sound again
-                if (*PauseSoundBuffer == 0x02) {
-                    // clear pause mode to allow game sounds again
-                    *PauseModeFlag = 0x00;
-                }
-                // clear pause sfx buffer
-                *PauseSoundBuffer = 0x00;
-            }
-        } else {
-            // play sfx on square channel 1
-            Square1SfxHandler();
-            //  ''  ''  '' square channel 2
-            Square2SfxHandler();
-            //  ''  ''  '' noise channel
-            NoiseSfxHandler();
-            // play music on all channels
-            MusicHandler();
-            // clear the music queues
-            *AreaMusicQueue = 0x00;
-            *EventMusicQueue = 0x00;
-        }
+    dec(*Squ1_SfxLenCounter);   // decrement pause sfx counter
+    bne(SkipSoundSubroutines);
+    lda(0x00);                  // disable sound if in pause mode and
+    apu_write_snd_chn(a);       // not currently playing the pause sfx
+    lda(*PauseSoundBuffer);     // if no longer playing pause sfx, check to see
+    cmp(0x02);                  // if we need to be playing sound again
+    bne(SkipPIn);
+    lda(0x00);                  // clear pause mode to allow game sounds again
+    sta(*PauseModeFlag);
+SkipPIn:
+    lda(0x00);                  // clear pause sfx buffer
+    sta(*PauseSoundBuffer);
+    beq(SkipSoundSubroutines);
+
+RunSoundSubroutines:
+    Square1SfxHandler();    // play sfx on square channel 1
+    Square2SfxHandler();    //  ''  ''  '' square channel 2
+    NoiseSfxHandler();      //  ''  ''  '' noise channel
+    MusicHandler();         // play music on all channels
+    lda(0x00);              // clear the music queues
+    sta(*AreaMusicQueue);
+    sta(*EventMusicQueue);
+
 SkipSoundSubroutines:
-        // clear the sound effects queues
-        *Square1SoundQueue = 0x00;
-        *Square2SoundQueue = 0x00;
-        *NoiseSoundQueue = 0x00;
-        *PauseSoundQueue = 0x00;
-        // load some sort of counter
-        y = *DAC_Counter;
-        // check for specific music
-        // increment and check counter
-        // if not there yet, just store it
-        // if we are at zero, do not decrement
-        if ((!(*AreaMusicBuffer & 0x03) || (++*DAC_Counter, y >= 0x30)) && y) {
-            // decrement counter
-            --*DAC_Counter;
-        }
-        // store into DMC load register (??)
-        apu_write_dmc_raw(y);
-        // we are done here
-    }
+    lda(0x00);              // clear the sound effects queues
+    sta(*Square1SoundQueue);
+    sta(*Square2SoundQueue);
+    sta(*NoiseSoundQueue);
+    sta(*PauseSoundQueue);
+    ldy(*DAC_Counter);      // load some sort of counter 
+    lda(*AreaMusicBuffer);
+    and(0x03);              // check for specific music
+    beq(NoIncDAC);
+    inc(*DAC_Counter);      // increment and check counter
+    cpy(0x30);
+    bcc(StrWave);           // if not there yet, just store it
+NoIncDAC:
+    tya();
+    beq(StrWave);           // if we are at zero, do not decrement 
+    dec(*DAC_Counter);      // decrement counter
+StrWave:
+    apu_write_dmc_raw(y);   // store into DMC load register (??)
+    // rts                  // we are done here
 }
 
 void Dump_Squ1_Regs(uint8_t x, uint8_t y) {
-    // dump the contents of X and Y into square 1's control regs
-    apu_write_sq1_sweep(y);
+    apu_write_sq1_sweep(y); // dump the contents of X and Y into square 1's control regs
     apu_write_sq1_vol(x);
+    // rts
 }
 
 void PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y) {
-    // do sub to set ctrl regs for square 1, then set frequency regs
-    Dump_Squ1_Regs(x, y);
+    Dump_Squ1_Regs(x, y);   // do sub to set ctrl regs for square 1, then set frequency regs
     SetFreq_Squ1(a);
 }
 
 uint8_t SetFreq_Squ1(uint8_t a) {
-    // set frequency reg offset for square 1 sound channel
-    return Dump_Freq_Regs(a, 0x00);
+    uint8_t x;
+    bool n, z;
+
+    ldx(0x00);  // set frequency reg offset for square 1 sound channel
+    return Dump_Freq_Regs(a, x);
 }
 
 uint8_t Dump_Freq_Regs(uint8_t a, uint8_t x) {
     uint8_t y;
+    bool n, z;
+    
     static const void (*apu_write[])(uint8_t) = {
         NULL,
         NULL,
@@ -1476,43 +1571,42 @@ uint8_t Dump_Freq_Regs(uint8_t a, uint8_t x) {
         apu_write_tri_hi
     };
 
-    y = a;
-    // use previous contents of A for sound reg offset
-    a = FreqRegLookupTbl[y+1];
-    // if zero, then do not load
-    if (a) {
-        // first byte goes into LSB of frequency divider
-        apu_write[x+2](a);
-        // second byte goes into 3 MSB plus extra bit for
-        // length counter
-        a = FreqRegLookupTbl[y] | 0x08;
-        apu_write[x+3](a);
-    }
+    tay();
+    lda(FreqRegLookupTbl[y+1]); // use previous contents of A for sound reg offset
+    beq(NoTone);                // if zero, then do not load
+    apu_write[x+2](a);          // first byte goes into LSB of frequency divider
+    lda(FreqRegLookupTbl[y]);   // second byte goes into 3 MSB plus extra bit for 
+    ora(0x08);                  // length counter
+    apu_write[x+3](a);
+NoTone:
     return a;
 }
 
 void Dump_Sq2_Regs(uint8_t x, uint8_t y) {
-    // dump the contents of X and Y into square 2's control regs
-    apu_write_sq2_vol(x);
+    apu_write_sq2_vol(x);   // dump the contents of X and Y into square 2's control regs
     apu_write_sq2_sweep(y);
+    // rts
 }
 
 void PlaySqu2Sfx(uint8_t a, uint8_t x, uint8_t y) {
-    // do sub to set ctrl regs for square 2 sound channel
-    Dump_Sq2_Regs(x, y);
+    Dump_Sq2_Regs(x, y);    // do sub to set ctrl regs for square 2 sound channel
     SetFreq_Squ2(a);
 }
 
 uint8_t SetFreq_Squ2(uint8_t a) {
-    // set frequency reg offset for square 2 sound channel
-    // unconditional branch
-    return Dump_Freq_Regs(a, 0x04);
+    uint8_t x;
+    bool n, z;
+
+    ldx(0x04);                      // set frequency reg offset for square 2 sound channel
+    return Dump_Freq_Regs(a, x);    // unconditional branch
 }
 
 uint8_t SetFreq_Tri(uint8_t a) {
-    // set frequency reg offset for triangle sound channel
-    // unconditional branch
-    return Dump_Freq_Regs(a, 0x08);
+    uint8_t x;
+    bool n, z;
+
+    ldx(0x08);                      // set frequency reg offset for triangle sound channel
+    return Dump_Freq_Regs(a, x);    // unconditional branch
 }
 
 const uint8_t SwimStompEnvelopeData[0xe] = {
@@ -1523,229 +1617,188 @@ const uint8_t SwimStompEnvelopeData[0xe] = {
 // $f41b
 void Square1SfxHandler(void) {
     uint8_t a, x, y;
-    bool c;
+    bool n, z, c;
 
-    // check for sfx in queue
-    y = *Square1SoundQueue;
-    if (y) {
-        // if found, put in buffer
-        *Square1SoundBuffer = y;
-        if (y & 0x80) {
-            // small jump
-            goto PlaySmallJump;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x01) {
-            // big jump
-            goto PlayBigJump;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x02) {
-            // bump
-            goto PlayBump;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x04) {
-            // swim/stomp
-            goto PlaySwimStomp;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x08) {
-            // smack enemy
-            goto PlaySmackEnemy;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x10) {
-            // pipedown/injury
-            goto PlayPipeDownInj;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x20) {
-            // fireball throw
-            goto PlayFireballThrow;
-        }
-        *Square1SoundQueue >>= 1;
-        if (y & 0x40) {
-            // slide flagpole
-            goto PlayFlagpoleSlide;
-        }
-    }
-    // check for sfx in buffer
-    a = *Square1SoundBuffer;
-    // if not found, exit sub
-    if (a) {
-        if (a & 0x80) {
-            // small mario jump
-            goto ContinueSndJump;
-        }
-        if (a & 0x01) {
-            // big mario jump
-            goto ContinueSndJump;
-        }
-        if (a & 0x02) {
-            // bump
-            goto ContinueBumpThrow;
-        }
-        if (a & 0x04) {
-            // swim/stomp
-            goto ContinueSwimStomp;
-        }
-        if (a & 0x08) {
-            // smack enemy
-            goto ContinueSmackEnemy;
-        }
-        if (a & 0x10) {
-            // pipedown/injury
-            goto ContinuePipeDownInj;
-        }
-        if (a & 0x20) {
-            // fireball throw
-            goto ContinueBumpThrow;
-        }
-        if (a & 0x40) {
-            // slide flagpole
-            goto DecrementSfx1Length;
-        }
-    }
+    goto Square1SfxHandler;
+
+PlayFlagpoleSlide:
+    lda(0x40);                          // store length of flagpole sound
+    sta(*Squ1_SfxLenCounter);
+    lda(0x62);                          // load part of reg contents for flagpole sound
+    SetFreq_Squ1(a);
+    ldx(0x99);                          // now load the rest
+    bne(FPS2nd);
+
+PlaySmallJump:
+    lda(0x26);                          // branch here for small mario jumping sound
+    bne(JumpRegContents);
+
+PlayBigJump:
+    lda(0x18);                          // branch here for big mario jumping sound
+
+JumpRegContents:
+    ldx(0x82);                          // note that small and big jump borrow each others' reg contents
+    ldy(0xa7);                          // anyway, this loads the first part of mario's jumping sound
+    PlaySqu1Sfx(a, x, y);
+    lda(0x28);                          // store length of sfx for both jumping sounds
+    sta(*Squ1_SfxLenCounter);           // then continue on here
+
+ContinueSndJump:
+    lda(*Squ1_SfxLenCounter);           // jumping sounds seem to be composed of three parts
+    cmp(0x25);                          // check for time to play second part yet
+    bne(N2Prt);
+    ldx(0x5f);                          // load second part
+    ldy(0xf6);
+    bne(DmpJpFPS);                      // unconditional branch
+N2Prt:
+    cmp(0x20);                          // check for third part
+    bne(DecJpFPS);
+    ldx(0x48);                          // load third part
+FPS2nd:
+    ldy(0xbc);                          // the flagpole slide sound shares part of third part
+DmpJpFPS:
+    Dump_Squ1_Regs(x, y);
+    bne(DecJpFPS);                      // unconditional branch outta here
+
+PlayFireballThrow:
+    lda(0x05);
+    ldy(0x99);                          // load reg contents for fireball throw sound
+    bne(Fthrow);                        // unconditional branch
+
+PlayBump:
+    lda(0x0a);                          // load length of sfx and reg contents for bump sound
+    ldy(0x93);
+Fthrow:
+    ldx(0x9e);                          // the fireball sound shares reg contents with the bump sound
+    sta(*Squ1_SfxLenCounter);
+    lda(0x0c);                          // load offset for bump sound
+    PlaySqu1Sfx(a, x, y);
+
+ContinueBumpThrow:    
+    lda(*Squ1_SfxLenCounter);           // check for second part of bump sound
+    cmp(0x06);   
+    bne(DecJpFPS);
+    lda(0xbb);                          // load second part directly
+    apu_write_sq1_sweep(a);
+DecJpFPS:
+    bne(BranchToDecLength1);            // unconditional branch
+
+
+Square1SfxHandler:
+    ldy(*Square1SoundQueue);            // check for sfx in queue
+    beq(CheckSfx1Buffer);
+    sty(*Square1SoundBuffer);           // if found, put in buffer
+    bmi(PlaySmallJump);                 // small jump
+    lsr(*Square1SoundQueue);
+    bcs(PlayBigJump);                   // big jump
+    lsr(*Square1SoundQueue);
+    bcs(PlayBump);                      // bump
+    lsr(*Square1SoundQueue);
+    bcs(PlaySwimStomp);                 // swim/stomp
+    lsr(*Square1SoundQueue);
+    bcs(PlaySmackEnemy);                // smack enemy
+    lsr(*Square1SoundQueue);
+    bcs(PlayPipeDownInj);               // pipedown/injury
+    lsr(*Square1SoundQueue);
+    bcs(PlayFireballThrow);             // fireball throw
+    lsr(*Square1SoundQueue);
+    bcs(PlayFlagpoleSlide);             // slide flagpole
+
+CheckSfx1Buffer:
+    lda(*Square1SoundBuffer);           // check for sfx in buffer 
+    beq(ExS1H);                         // if not found, exit sub
+    bmi(ContinueSndJump);               // small mario jump 
+    lsr(a);
+    bcs(ContinueSndJump);               // big mario jump 
+    lsr(a);
+    bcs(ContinueBumpThrow);             // bump
+    lsr(a);
+    bcs(ContinueSwimStomp);             // swim/stomp
+    lsr(a);
+    bcs(ContinueSmackEnemy);            // smack enemy
+    lsr(a);
+    bcs(ContinuePipeDownInj);           // pipedown/injury
+    lsr(a);
+    bcs(ContinueBumpThrow);             // fireball throw
+    lsr(a);
+    bcs(DecrementSfx1Length);           // slide flagpole
+ExS1H:
     return;
 
 PlaySwimStomp:
-    // store length of swim/stomp sound
-    *Squ1_SfxLenCounter = 0x0e;
-    // store reg contents for swim/stomp sound
-    PlaySqu1Sfx(0x26, 0x9e, 0x9c);
+    lda(0x0e);                          // store length of swim/stomp sound
+    sta(*Squ1_SfxLenCounter);
+    ldy(0x9c);                          // store reg contents for swim/stomp sound
+    ldx(0x9e);
+    lda(0x26);
+    PlaySqu1Sfx(a, x, y);
 
-ContinueSwimStomp:
-    // look up reg contents in data section based on
-    // length of sound left, used to control sound's
-    // envelope
-    y = *Squ1_SfxLenCounter;
-    apu_write_sq1_vol(SwimStompEnvelopeData[y-1]);
-    if (y == 0x06) {
-        // when the length counts down to a certain point, put this
-        // directly into the LSB of square 1's frequency divider
-        apu_write_sq1_lo(0x9e);
-    }
-    // unconditional branch (regardless of how we got here)
-    goto DecrementSfx1Length;
+ContinueSwimStomp: 
+    ldy(*Squ1_SfxLenCounter)            // look up reg contents in data section based on
+    lda(SwimStompEnvelopeData[y-1]);    // length of sound left, used to control sound's
+    apu_write_sq1_vol(a);               // envelope
+    cpy(0x06);   
+    bne(BranchToDecLength1);
+    lda(0x9e);                          // when the length counts down to a certain point, put this
+    apu_write_sq1_lo(a);                // directly into the LSB of square 1's frequency divider
+
+BranchToDecLength1: 
+    bne(DecrementSfx1Length);           // unconditional branch (regardless of how we got here)
 
 PlaySmackEnemy:
-    // store length of smack enemy sound
-    *Squ1_SfxLenCounter = 0x0e;
-    // store reg contents for smack enemy sound
-    PlaySqu1Sfx(0x28, 0x9f, 0xcb);
-    // unconditional branch
-    goto DecrementSfx1Length;
+    lda(0x0e);                          // store length of smack enemy sound
+    ldy(0xcb);
+    ldx(0x9f);
+    sta(*Squ1_SfxLenCounter);
+    lda(0x28);                          // store reg contents for smack enemy sound
+    PlaySqu1Sfx(a, x, y);
+    bne(DecrementSfx1Length);           // unconditional branch
 
 ContinueSmackEnemy:
-    // check about halfway through
-    if (*Squ1_SfxLenCounter == 0x08) {
-        // if we're at the about-halfway point, make the second tone
-        // in the smack enemy sound
-        apu_write_sq1_lo(0xa0);
-        a = 0x9f;
-    } else {
-        // this creates space in the sound, giving it its distinct noise
-        a = 0x90;
-    }
+    ldy(*Squ1_SfxLenCounter);           // check about halfway through
+    cpy(0x08);
+    bne(SmSpc);
+    lda(0xa0);                          // if we're at the about-halfway point, make the second tone
+    apu_write_sq1_lo(a);                // in the smack enemy sound
+    lda(0x9f);
+    bne(SmTick);
+SmSpc:
+    lda(0x90);                          // this creates spaces in the sound, giving it its distinct noise
+SmTick:
     apu_write_sq1_vol(a);
 
 DecrementSfx1Length:
-    // decrement length of sfx
-    if (!--*Squ1_SfxLenCounter) {
-        StopSquare1Sfx();
-    }
+    dec(*Squ1_SfxLenCounter);           // decrement length of sfx
+    bne(ExSfx1);
+
+StopSquare1Sfx:
+    ldx(0x00);                          // if end of sfx reached, clear buffer
+    stx(*Square1SoundBuffer);           // and stop making the sfx
+    ldx(0x0e);
+    apu_write_snd_chn(x);
+    ldx(0x0f);
+    apu_write_snd_chn(x);
+ExSfx1:
     return;
 
-PlayPipeDownInj:
-    // load length of pipedown sound
-    *Squ1_SfxLenCounter = 0x2f;
+PlayPipeDownInj:  
+    lda(0x2f);                          // load length of pipedown sound
+    sta(*Squ1_SfxLenCounter);
 
 ContinuePipeDownInj:
-    // some bitwise logic, forces the regs
-    // to be written to only during six specific times
-    // during which d3 must be set and d1-0 must be clear
-    a = *Squ1_SfxLenCounter;
-    if (!(a & 0x01) && !(a & 0x02) && (a & 0x08)) {
-        // and this is where it actually gets written in
-        PlaySqu1Sfx(0x44, 0x9a, 0x91);
-    }
-    goto DecrementSfx1Length;
-
-PlayFlagpoleSlide:
-    // store length of flagpole sound
-    *Squ1_SfxLenCounter = 0x40;
-    // load part of reg contents for flagpole sound
-    SetFreq_Squ1(0x62);
-    // now load the rest
-    x = 0x99;
-    goto FPS2nd;
-
-PlaySmallJump:
-    // branch here for small mario jumping sound
-    a = 0x26;
-    goto JumpRegContents;
-
-PlayBigJump:
-    // branch here for big mario jumping sound
-    a = 0x18;
-
-JumpRegContents:
-    // note that small and big jump borrow each others' reg contents
-    // anyway, this loads the first part of mario's jumping sound
-    PlaySqu1Sfx(a, 0x82, 0xa7);
-    // store length of sfx for both jumping sounds
-    // then continue on here
-    *Squ1_SfxLenCounter = 0x28;
-
-ContinueSndJump:
-    // jumping sounds seem to be composed of three parts
-    a = *Squ1_SfxLenCounter;
-    // check for time to play second yet
-    if (a == 0x25) {
-        // load second part
-        x = 0x5f;
-        y = 0xf6;
-        // unconditional branch
-    // check for third part
-    } else {
-        if (a != 0x20) {
-            goto DecrementSfx1Length;
-        }
-        x = 0x48;
-FPS2nd:
-        y = 0xbc;
-    }
-    Dump_Squ1_Regs(x, y);
-    // unconditional branch outta here
-    goto DecrementSfx1Length;
-
-PlayFireballThrow:
-    a = 0x05;
-    // load reg contents for fireball throw sound
-    y = 0x99;
-    // unconditional branch
-    goto Fthrow;
-
-PlayBump:
-    // load length of sfx and reg contents for bump sound
-    a = 0x0a;
-    y = 0x93;
-Fthrow:
-    // the fireball sound shares reg contents with the bump sound
-    *Squ1_SfxLenCounter = a;
-    // load offset for bump sound
-    PlaySqu1Sfx(0x0c, 0x9e, y);
-
-ContinueBumpThrow:
-    // check for second part of bump sound
-    a = *Squ1_SfxLenCounter;
-    if (a == 0x06) {
-        // load second part directly
-        apu_write_sq1_sweep(0xbb);
-    }
-    // unconditional branch
-    goto DecrementSfx1Length;
+    lda(*Squ1_SfxLenCounter);           // some bitwise logic, forces the regs
+    lsr(a);                             // to be written to only during six specific times
+    bcs(NoPDwnL);                       // during which d3 must be set and d1-0 must be clear
+    lsr(a);
+    bcs(NoPDwnL);
+    and(0x02);
+    beq(NoPDwnL);
+    ldy(0x91);                          // and this is where it actually gets written in
+    ldx(0x9a);
+    lda(0x44);
+    PlaySqu1Sfx(a, x, y);
+NoPDwnL:
+    jmp(DecrementSfx1Length);
 }
 
 void StopSquare1Sfx(void) {

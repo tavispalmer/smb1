@@ -97,11 +97,11 @@ void cpu_write_joy2(uint8_t value);
 }
 
 #define clc() { \
-    c = 0; \
+    c = false; \
 }
 
 #define clv() { \
-    v = 0; \
+    v = false; \
 }
 
 #define cmp(value) { \
