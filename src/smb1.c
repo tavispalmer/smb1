@@ -54,10 +54,10 @@ void UpdateTopScore(void);
 uint8_t InitializeMemory(uint8_t y);
 void SoundEngine(void);
 void Dump_Squ1_Regs(uint8_t x, uint8_t y);
-void PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y);
-uint8_t SetFreq_Squ1(uint8_t a);
-uint8_t Dump_Freq_Regs(uint8_t a, uint8_t x);
-uint8_t SetFreq_Squ2(uint8_t a);
+bool PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y);
+bool SetFreq_Squ1(uint8_t a);
+bool Dump_Freq_Regs(uint8_t a, uint8_t x);
+void SetFreq_Squ2(uint8_t a);
 const uint8_t SwimStompEnvelopeData[0xe];
 void Square1SfxHandler(void);
 void StopSquare1Sfx(void);
@@ -933,7 +933,6 @@ void PauseRoutine(void) {
     uint8_t a, y;
     bool n, z, c;
 
-PauseRoutine:
     lda(*OperMode);         // are we in victory mode?
     cmp(VictoryModeValue);  // if so, go ahead
     beq(ChkPauseTimer);
@@ -1317,9 +1316,6 @@ Save8Bits:
     // rts
 }
 
-// $8edd
-// inputs:              none
-// possible outputs:    a, x, y, n, z, c
 void UpdateScreen(const uint8_t *m0) {
     uint8_t a, x, y;
     bool n, v, z, c;
@@ -1363,8 +1359,8 @@ RepeatByte:
     bne(OutputToVRAM);
     sec();
     tya();
-    // adc $00                   ;add end length plus one to the indirect at $00
-    // sta $00                   ;to allow this routine to read another set of updates
+    // adc $00                  // add end length plus one to the indirect at $00
+    // sta $00                  // to allow this routine to read another set of updates
     // lda #$00
     // adc $01
     // sta $01
@@ -1398,10 +1394,40 @@ void WritePPUReg1(uint8_t a) {
     sta(*Mirror_PPU_CTRL_REG1); // and its mirror
 }
 
-// $8f97
 void UpdateTopScore(void) {
-    pc = 0x8f97;
-    cpu_execute();
+    uint8_t x;
+    bool n, z;
+
+    ldx(0x05);          // start with mario's score
+    TopScoreCheck(x);
+    ldx(0x0b);          // now do luigi's score
+    TopScoreCheck(x);
+}
+
+void TopScoreCheck(uint8_t x) {
+    uint8_t a, y;
+    bool n, v, z, c;
+
+    ldy(0x05);                  // start with the lowest digit
+    sec();         
+GetScoreDiff:
+    lda(PlayerScoreDisplay[x]); // subtract each player digit from each high score digit
+    sbc(TopScoreDisplay[y]);    // from lowest to highest, if any top score digit exceeds
+    dex();                      // any player digit, borrow will be set until a subsequent
+    dey();                      // subtraction clears it (player digit is higher than top)
+    bpl(GetScoreDiff);      
+    bcc(NoTopSc);               // check to see if borrow is still set, if so, no new high score
+    inx();                      // increment X and Y once to the start of the score
+    iny();
+CopyScore:
+    lda(PlayerScoreDisplay[x]); // store player's score digits into high score memory area
+    sta(TopScoreDisplay[y]);
+    inx();
+    iny();
+    cpy(0x06);                  // do this until we have stored them all
+    bcc(CopyScore);
+NoTopSc:
+    // rts
 }
 
 // $90cc
@@ -1433,9 +1459,6 @@ SkipByte:
     return a;
 }
 
-// $f2d0
-// inputs:              none
-// possible outputs:    a, x, y, n, z, c
 void SoundEngine(void) {
     uint8_t a, x, y;
     bool n, z, c;
@@ -1539,20 +1562,20 @@ void Dump_Squ1_Regs(uint8_t x, uint8_t y) {
     // rts
 }
 
-void PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y) {
+bool PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y) {
     Dump_Squ1_Regs(x, y);   // do sub to set ctrl regs for square 1, then set frequency regs
-    SetFreq_Squ1(a);
+    return SetFreq_Squ1(a);
 }
 
-uint8_t SetFreq_Squ1(uint8_t a) {
+bool SetFreq_Squ1(uint8_t a) {
     uint8_t x;
     bool n, z;
 
-    ldx(0x00);  // set frequency reg offset for square 1 sound channel
+    ldx(0x00);              // set frequency reg offset for square 1 sound channel
     return Dump_Freq_Regs(a, x);
 }
 
-uint8_t Dump_Freq_Regs(uint8_t a, uint8_t x) {
+bool Dump_Freq_Regs(uint8_t a, uint8_t x) {
     uint8_t y;
     bool n, z;
     
@@ -1579,7 +1602,7 @@ uint8_t Dump_Freq_Regs(uint8_t a, uint8_t x) {
     ora(0x08);                  // length counter
     apu_write[x+3](a);
 NoTone:
-    return a;
+    return z;
 }
 
 void Dump_Sq2_Regs(uint8_t x, uint8_t y) {
@@ -1593,20 +1616,20 @@ void PlaySqu2Sfx(uint8_t a, uint8_t x, uint8_t y) {
     SetFreq_Squ2(a);
 }
 
-uint8_t SetFreq_Squ2(uint8_t a) {
+void SetFreq_Squ2(uint8_t a) {
     uint8_t x;
     bool n, z;
 
-    ldx(0x04);                      // set frequency reg offset for square 2 sound channel
-    return Dump_Freq_Regs(a, x);    // unconditional branch
+    ldx(0x04);              // set frequency reg offset for square 2 sound channel
+    Dump_Freq_Regs(a, x);   // unconditional branch
 }
 
-uint8_t SetFreq_Tri(uint8_t a) {
+void SetFreq_Tri(uint8_t a) {
     uint8_t x;
     bool n, z;
 
-    ldx(0x08);                      // set frequency reg offset for triangle sound channel
-    return Dump_Freq_Regs(a, x);    // unconditional branch
+    ldx(0x08);              // set frequency reg offset for triangle sound channel
+    Dump_Freq_Regs(a, x);   // unconditional branch
 }
 
 const uint8_t SwimStompEnvelopeData[0xe] = {
@@ -1751,7 +1774,7 @@ PlaySmackEnemy:
     ldx(0x9f);
     sta(*Squ1_SfxLenCounter);
     lda(0x28);                          // store reg contents for smack enemy sound
-    PlaySqu1Sfx(a, x, y);
+    z = PlaySqu1Sfx(a, x, y);
     bne(DecrementSfx1Length);           // unconditional branch
 
 ContinueSmackEnemy:
@@ -1771,13 +1794,7 @@ DecrementSfx1Length:
     dec(*Squ1_SfxLenCounter);           // decrement length of sfx
     bne(ExSfx1);
 
-StopSquare1Sfx:
-    ldx(0x00);                          // if end of sfx reached, clear buffer
-    stx(*Square1SoundBuffer);           // and stop making the sfx
-    ldx(0x0e);
-    apu_write_snd_chn(x);
-    ldx(0x0f);
-    apu_write_snd_chn(x);
+    StopSquare1Sfx();
 ExSfx1:
     return;
 
@@ -1802,11 +1819,17 @@ NoPDwnL:
 }
 
 void StopSquare1Sfx(void) {
-    // if end of sfx reached, clear buffer
-    // and stop making the sfx
-    *Square1SoundBuffer = 0x00;
-    apu_write_snd_chn(0x0e);
-    apu_write_snd_chn(0x0f);
+    uint8_t x;
+    bool n, z;
+
+    ldx(0x00);                  // if end of sfx reached, clear buffer
+    stx(*Square1SoundBuffer);   // and stop making the sfx
+    ldx(0x0e);
+    apu_write_snd_chn(x);
+    ldx(0x0f);
+    apu_write_snd_chn(x);
+ExSfx1:
+    // rts
 }
 
 const uint8_t ExtraLifeFreqData[0x6] = {
@@ -1829,254 +1852,206 @@ const uint8_t PUp_VGrow_FreqData[0x20] = {
 // $f57c
 void Square2SfxHandler(void) {
     uint8_t a, x, y;
-    bool c;
+    bool n, z, c;
 
-    // special handling for the 1-up sound to keep it
-    // from being interrupted by other sounds on square 2
-    if (*Square2SoundBuffer & Sfx_ExtraLife) {
-        goto ContinueExtraLife;
-    }
-    // check for sfx in queue
-    y = *Square2SoundQueue;
-    if (y) {
-        // if found, put in buffer and check for the following
-        *Square2SoundBuffer = y;
-        if (y & 0x80) {
-            // bowser fall
-            goto PlayBowserFall;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x01) {
-            // coin grab
-            goto PlayCoinGrab;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x02) {
-            // power-up reveal
-            goto PlayGrowPowerUp;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x04) {
-            // vine grow
-            goto PlayGrowVine;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x08) {
-            // fireworks/gunfire
-            goto PlayBlast;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x10) {
-            // timer tick
-            goto PlayTimerTick;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x20) {
-            // power-up grab
-            goto PlayPowerUpGrab;
-        }
-        *Square2SoundQueue >>= 1;
-        if (y & 0x40) {
-            // 1-up
-            goto PlayExtraLife;
-        }
-    }
-    // check for sfx in buffer
-    a = *Square2SoundBuffer;
-    // if not found, exit sub
-    if (a) {
-        if (a & 0x80) {
-            // bowser fall
-            goto ContinueBowserFall;
-        }
-        if (a & 0x01) {
-            // coin grab
-            goto ContinueCGrabTTick;
-        }
-        if (a & 0x02) {
-            // power-up reveal
-            goto ContinueGrowItems;
-        }
-        if (a & 0x04) {
-            // vine grow
-            goto ContinueGrowItems;
-        }
-        if (a & 0x08) {
-            // fireworks/gunfire
-            goto ContinueBlast;
-        }
-        if (a & 0x10) {
-            // timer tick
-            goto ContinueCGrabTTick;
-        }
-        if (a & 0x20) {
-            // power-up grab
-            goto ContinuePowerUpGrab;
-        }
-        if (a & 0x40) {
-            // 1-up
-            goto ContinueExtraLife;
-        }
-    }
-    return;
-
-PlayBowserFall:
-    // load length of bowser defeat sound
-    *Squ2_SfxLenCounter = 0x38;
-    // load contents of reg for bowser defeat sound
-    y = 0xc4;
-    a = 0x18;
-    goto PBFRegs;
-
-ContinueBowserFall:
-    // check for almost near the end
-    if (*Squ2_SfxLenCounter != 0x08) {
-        goto DecrementSfx2Length;
-    }
-    // if so, load the rest of reg contents for bowser defeat sound
-    y = 0xa4;
-    a = 0x5a;
-PBFRegs:
-    // the fireworks/gunfire sound shares part of reg contents here
-    x = 0x9f;
-    // this is an unconditional branch outta here
-    goto LoadSqu2Regs;
-
-PlayExtraLife:
-    // load length of 1-up sound
-    *Squ2_SfxLenCounter = 0x30;
-
-ContinueExtraLife:
-    a = *Squ2_SfxLenCounter;
-    // load new tones only every eight frames
-    // if any bits are set here, branch to dec the length
-    // do this until all bits checked, if none set, continue
-    if (a & 0x07) {
-        goto DecrementSfx2Length;
-    }
-    // load our reg contents
-    a = ExtraLifeFreqData[(a>>3)-1];
-    x = 0x82;
-    y = 0x7f;
-    // unconditional branch
-    goto LoadSqu2Regs;
-
-PlayGrowPowerUp:
-    // load length of power-up reveal sound
-    a = 0x10;
-    goto GrowItemRegs;
-
-PlayGrowVine:
-    // load length of vine grow sound
-    a = 0x20;
-
-GrowItemRegs:
-    *Squ2_SfxLenCounter = a;
-    // load contents of reg for both sounds directly
-    apu_write_sq2_sweep(0x7f);
-    // start secondary counter for both sounds
-    *Sfx_SecondaryCounter = 0x00;
-
-ContinueGrowItems:
-    // increment secondary counter for both sounds
-    ++*Sfx_SecondaryCounter;
-    // this sound doesn't decrement the usual counter
-    // divide by 2 to get the offset
-    a = *Sfx_SecondaryCounter >> 1;
-    y = a;
-    // have we reached the end yet?
-    if (y == *Squ2_SfxLenCounter) {
-        // if so, branch to jump, and stop playing sounds
-        goto EmptySfx2Buffer;
-    }
-    // load contents of other reg directly
-    apu_write_sq2_vol(0x9d);
-    // use secondary counter / 2 as offset for frequency regs
-    SetFreq_Squ2(PUp_VGrow_FreqData[y]);
-    return;
+    goto Square2SfxHandler;
 
 PlayCoinGrab:
-    // load length of coin grab sound
-    // and part of reg contents
-    a = 0x35;
-    x = 0x8d;
-    goto CGrab_TTickRegL;
+    lda(0x35);                      // load length of coin grab sound
+    ldx(0x8d);                      // and part of reg contents
+    bne(CGrab_TTickRegL);
 
 PlayTimerTick:
-    // load length of timer tick sound
-    // and part of reg contents
-    a = 0x06;
-    x = 0x98;
+    lda(0x06);                      // load length of timer tick sound
+    ldx(0x98);                      // and part of reg contents
 
 CGrab_TTickRegL:
-    *Squ2_SfxLenCounter = a;
-    // load the rest of reg contents
-    // of coin grab and timer tick sound
-    PlaySqu2Sfx(0x42, x, 0x7f);
-    
+    sta(*Squ2_SfxLenCounter); 
+    ldy(0x7f);                      // load the rest of reg contents 
+    lda(0x42);                      // of coin grab and timer tick sound
+    PlaySqu2Sfx(a, x, y);
+
 ContinueCGrabTTick:
-    // check for time to play second tone yet
-    // timer tick sound also executes this, not sure why
-    if (*Squ2_SfxLenCounter == 0x30) {
-        // if so, load the tone directly into the reg
-        apu_write_sq2_lo(0x54);   
-    }
-    goto DecrementSfx2Length;
+    lda(*Squ2_SfxLenCounter);       // check for time to play second tone yet
+    cmp(0x30);                      // timer tick sound also executes this, not sure why
+    bne(N2Tone);
+    lda(0x54);                      // if so, load the tone directly into the reg
+    apu_write_sq2_lo(a);
+N2Tone:
+    bne(DecrementSfx2Length);
 
 PlayBlast:
-    // load length of fireworks/gunfire sound
-    *Squ2_SfxLenCounter = 0x20;
-    // load reg contents of fireworks/gunfire sound
-    y = 0x94;
-    a = 0x5e;
-    goto PBFRegs;
+    lda(0x20);                      // load length of fireworks/gunfire sound
+    sta(*Squ2_SfxLenCounter);
+    ldy(0x94);                      // load reg contents of fireworks/gunfire sound
+    lda(0x5e);
+    bne(SBlasJ);
 
 ContinueBlast:
-    // check for time to play second part
-    if (*Squ2_SfxLenCounter != 0x18) {
-        goto DecrementSfx2Length;
-    }
-    // load second part reg contents then
-    y = 0x93;
-    a = 0x18;
-    // unconditional branch to load rest of reg contents
-    goto PBFRegs;
+    lda(*Squ2_SfxLenCounter);       // check for time to play second part
+    cmp(0x18);
+    bne(DecrementSfx2Length);
+    ldy(0x93);                      // load second part reg contents then
+    lda(0x18);
+SBlasJ:
+    bne(BlstSJp);                   // unconditional branch to load rest of reg contents
 
 PlayPowerUpGrab:
-    // load length of power-up grab sound
-    *Squ2_SfxLenCounter = 0x36;
+    lda(0x36);                      // load length of power-up grab sound
+    sta(*Squ2_SfxLenCounter);
 
-ContinuePowerUpGrab:
-    // load frequency reg based on length left over
-    a = *Squ2_SfxLenCounter;
-    // divide by 2
-    if (a & 0x01) {
-        // alter frequency every other frame
-        goto DecrementSfx2Length;
-    }
-    // use length left over / 2 for frequency offset
-    a = PowerUpGrabFreqData[(a>>1)-1];
-    // store reg contents of power-up grab sound
-    x = 0x5d;
-    y = 0x7f;
+ContinuePowerUpGrab:   
+    lda(*Squ2_SfxLenCounter);       // load frequency reg based on length left over
+    lsr(a);                         // divide by 2
+    bcs(DecrementSfx2Length);       // alter frequency every other frame
+    tay();
+    lda(PowerUpGrabFreqData[y-1]);  // use length left over / 2 for frequency offset
+    ldx(0x5d);                      // store reg contents of power-up grab sound
+    ldy(0x7f);
 
 LoadSqu2Regs:
     PlaySqu2Sfx(a, x, y);
 
 DecrementSfx2Length:
-    // decrement length of sfc
-    if (!--*Squ2_SfxLenCounter) {
+    dec(*Squ2_SfxLenCounter);       // decrement length of sfx
+    bne(ExSfx2);
+
 EmptySfx2Buffer:
-        // initialize square 2's sound effects buffer
-        *Square2SoundBuffer = 0x00;
-        StopSquare2Sfx();
-    }
+    ldx(0x00);                      // initialize square 2's sound effects buffer
+    stx(*Square2SoundBuffer);
+
+    StopSquare2Sfx();
+ExSfx2:
+    return;
+
+Square2SfxHandler:
+    lda(*Square2SoundBuffer);       // special handling for the 1-up sound to keep it
+    and(Sfx_ExtraLife);             // from being interrupted by other sounds on square 2
+    bne(ContinueExtraLife);
+    ldy(*Square2SoundQueue);        // check for sfx in queue
+    beq(CheckSfx2Buffer);
+    sty(*Square2SoundBuffer);       // if found, put in buffer and check for the following
+    bmi(PlayBowserFall);            // bowser fall
+    lsr(*Square2SoundQueue);
+    bcs(PlayCoinGrab);              // coin grab
+    lsr(*Square2SoundQueue);
+    bcs(PlayGrowPowerUp);           // power-up reveal
+    lsr(*Square2SoundQueue);
+    bcs(PlayGrowVine);              // vine grow
+    lsr(*Square2SoundQueue);
+    bcs(PlayBlast);                 // fireworks/gunfire
+    lsr(*Square2SoundQueue);
+    bcs(PlayTimerTick);             // timer tick
+    lsr(*Square2SoundQueue);
+    bcs(PlayPowerUpGrab);           // power-up grab
+    lsr(*Square2SoundQueue);
+    bcs(PlayExtraLife);             // 1-up
+
+CheckSfx2Buffer:
+    lda(*Square2SoundBuffer);       // check for sfx in buffer
+    beq(ExS2H);                     // if not found, exit sub
+    bmi(ContinueBowserFall);        // bowser fall
+    lsr(a);
+    bcs(Cont_CGrab_TTick);          // coin grab
+    lsr(a);
+    bcs(ContinueGrowItems);         // power-up reveal
+    lsr(a);
+    bcs(ContinueGrowItems);         // vine grow
+    lsr(a);
+    bcs(ContinueBlast);             // fireworks/gunfire
+    lsr(a);
+    bcs(Cont_CGrab_TTick);          // timer tick
+    lsr(a);
+    bcs(ContinuePowerUpGrab);       // power-up grab
+    lsr(a);
+    bcs(ContinueExtraLife);         // 1-up
+ExS2H:
+    return;
+
+Cont_CGrab_TTick:
+    jmp(ContinueCGrabTTick);
+
+JumpToDecLength2:
+    jmp(DecrementSfx2Length);
+
+PlayBowserFall:    
+    lda(0x38);                      // load length of bowser defeat sound
+    sta(*Squ2_SfxLenCounter);
+    ldy(0xc4);                      // load contents of reg for bowser defeat sound
+    lda(0x18);
+BlstSJp:
+    bne(PBFRegs);
+
+ContinueBowserFall:
+    lda(*Squ2_SfxLenCounter);       // check for almost near the end
+    cmp(0x08);
+    bne(DecrementSfx2Length);
+    ldy(0xa4);                      // if so, load the rest of reg contents for bowser defeat sound
+    lda(0x5a);
+PBFRegs:
+    ldx(0x9f);                      // the fireworks/gunfire sound shares part of reg contents here
+EL_LRegs:
+    bne(LoadSqu2Regs);              // this is an unconditional branch outta here
+
+PlayExtraLife:
+    lda(0x30);                      // load length of 1-up sound
+    sta(*Squ2_SfxLenCounter);
+
+ContinueExtraLife:
+    lda(*Squ2_SfxLenCounter);   
+    ldx(0x03);                      // load new tones only every eight frames
+DivLLoop:
+    lsr(a);
+    bcs(JumpToDecLength2);          // if any bits set here, branch to dec the length
+    dex();
+    bne(DivLLoop);                  // do this until all bits checked, if none set, continue
+    tay();
+    lda(ExtraLifeFreqData[y-1]);    // load our reg contents
+    ldx(0x82);
+    ldy(0x7f);
+    bne(EL_LRegs);                  // unconditional branch
+
+PlayGrowPowerUp:
+    lda(0x10);                      // load length of power-up reveal sound
+    bne(GrowItemRegs);
+
+PlayGrowVine:
+    lda(0x20);                      // load length of vine grow sound
+
+GrowItemRegs:
+    sta(*Squ2_SfxLenCounter);
+    lda(0x7f);                      // load contents of reg for both sounds directly
+    apu_write_sq2_sweep(a);
+    lda(0x00);                      // start secondary counter for both sounds
+    sta(*Sfx_SecondaryCounter);
+
+ContinueGrowItems:
+    inc(*Sfx_SecondaryCounter);     // increment secondary counter for both sounds
+    lda(*Sfx_SecondaryCounter);     // this sound doesn't decrement the usual counter
+    lsr(a);                         // divide by 2 to get the offset
+    tay();
+    cpy(*Squ2_SfxLenCounter);       // have we reached the end yet?
+    beq(StopGrowItems);             // if so, branch to jump, and stop playing sounds
+    lda(0x9d);                      // load contents of other reg directly
+    apu_write_sq2_vol(a);
+    lda(PUp_VGrow_FreqData[y]);     // use secondary counter / 2 as offset for frequency regs
+    SetFreq_Squ2(a);
+    return;
+
+StopGrowItems:
+    jmp(EmptySfx2Buffer);           // branch to stop playing sounds
 }
 
 void StopSquare2Sfx(void) {
-    // stop playing the sfx
-    apu_write_snd_chn(0x0d);
-    apu_write_snd_chn(0x0f);
+    uint8_t x;
+    bool n, z;
+
+    ldx(0x0d);              // stop playing the sfx
+    apu_write_snd_chn(x); 
+    ldx(0x0f);
+    apu_write_snd_chn(x);
+ExSfx2:
+    // rts
 }
 
 const uint8_t BrickShatterFreqData[0x10] = {
@@ -2086,507 +2061,498 @@ const uint8_t BrickShatterFreqData[0x10] = {
 
 // $f667
 void NoiseSfxHandler(void) {
-    uint8_t a, y, x;
-    bool c;
+    uint8_t a, x, y;
+    bool n, z, c;
 
-    // check for sfx in queue
-    y = *NoiseSoundQueue;
-    if (*NoiseSoundQueue) {
-        // if found, put in buffer
-        *NoiseSoundBuffer = y;
-        *NoiseSoundQueue >>= 1;
-        if (y & 0x01) {
-            // brick shatter
-            goto PlayBrickShatter;
-        }
-        *NoiseSoundQueue >>= 1;
-        if (y & 0x02) {
-            // bowser flame
-            goto PlayBowserFlame;
-        }
-    }
-    // check for sfx in buffer
-    a = *NoiseSoundBuffer;
-    // if not found, exit sub
-    if (a) {
-        if (a & 0x01) {
-            // brick shatter
-            goto ContinueBrickShatter;
-        }
-        if (a & 0x02) {
-            // bowser flame
-            goto ContinueBowserFlame;
-        }
-    }
+    goto NoiseSfxHandler;
+
+PlayBrickShatter:
+    lda(0x20);                      // load length of brick shatter sound
+    sta(*Noise_SfxLenCounter);
+
+ContinueBrickShatter:
+    lda(*Noise_SfxLenCounter);  
+    lsr(a);                         // divide by 2 and check for bit set to use offset
+    bcc(DecrementSfx3Length);
+    tay();
+    ldx(BrickShatterFreqData[y]);   // load reg contents of brick shatter sound
+    lda(BrickShatterEnvData[y]);
+
+PlayNoiseSfx:
+    apu_write_noise_vol(a);         // play the sfx
+    apu_write_noise_lo(x);
+    lda(0x18);
+    apu_write_noise_hi(a);
+
+DecrementSfx3Length:
+    dec(*Noise_SfxLenCounter);      // decrement length of sfx
+    bne(ExSfx3);
+    lda(0xf0);                      // if done, stop playing the sfx
+    apu_write_noise_vol(a);
+    lda(0x00);
+    sta(*NoiseSoundBuffer);
+ExSfx3:
+    return;
+
+NoiseSfxHandler:
+    ldy(*NoiseSoundQueue);          // check for sfx in queue
+    beq(CheckNoiseBuffer);
+    sty(*NoiseSoundBuffer);         // if found, put in buffer
+    lsr(*NoiseSoundQueue);
+    bcs(PlayBrickShatter);          // brick shatter
+    lsr(*NoiseSoundQueue);
+    bcs(PlayBowserFlame);           // bowser flame
+
+CheckNoiseBuffer:
+    lda(*NoiseSoundBuffer);         // check for sfx in buffer
+    beq(ExNH);                      // if not found, exit sub
+    lsr(a);
+    bcs(ContinueBrickShatter);      // brick shatter
+    lsr(a);
+    bcs(ContinueBowserFlame);       // bowser flame
+ExNH:
     return;
 
 PlayBowserFlame:
-    // load length of bowser flame sound
-    *Noise_SfxLenCounter = 0x40;
+    lda(0x40);                      // load length of bowser flame sound
+    sta(*Noise_SfxLenCounter);
 
 ContinueBowserFlame:
-    // load reg contents of bowser flame sound
-    x = 0x0f;
-    a = BowserFlameEnvData[(*Noise_SfxLenCounter>>1)-1];
-    // unconditional branch here
-    goto PlayNoiseSfx;
-
-PlayBrickShatter:
-    // load length of brick shatter sound
-    *Noise_SfxLenCounter = 0x20;
-
-ContinueBrickShatter:
-    a = *Noise_SfxLenCounter;
-    // divide by 2 and check for bit set to use offset
-    if (!(a & 0x01)) {
-        goto DecrementSfx3Length;
-    }
-    a >>= 1;
-    // load reg contents of brick shatter sound
-    x = BrickShatterFreqData[a];
-    a = BrickShatterEnvData[a];
-
-PlayNoiseSfx:
-    // play the sfx
-    apu_write_noise_vol(a);
-    apu_write_noise_lo(x);
-    apu_write_noise_hi(0x18);
-
-DecrementSfx3Length:
-    // decrement the length of sfx
-    if (!--*Noise_SfxLenCounter) {
-        // if done, stop playing the sfx
-        apu_write_noise_vol(0xf0);
-        *NoiseSoundBuffer = 0x00;
-    }
+    lda(*Noise_SfxLenCounter);
+    lsr(a);
+    tay();
+    ldx(0x0f);                      // load reg contents of bowser flame sound
+    lda(BowserFlameEnvData[y-1]);
+    bne(PlayNoiseSfx);              // unconditional branch here
 }
 
 // $f694
 void MusicHandler(void) {
-    uint8_t a, x, y;
-    bool c;
-
-    a = *EventMusicQueue;
-    if (a) {
-        goto LoadEventMusic;
-    }
-    a = *AreaMusicQueue;
-    if (a) {
-        goto LoadAreaMusic;
-    }
-    a = *EventMusicBuffer;
-    a |= *AreaMusicBuffer;
-    if (a) {
-        goto HandleSquare2Music;
-    }
     return;
+//     uint8_t a, x, y;
+//     bool c;
 
-LoadEventMusic:
-    *EventMusicBuffer = a;
-    if (a != DeathMusic) {
-        goto NoStopSfx;
-    }
-    StopSquare1Sfx();
-    StopSquare2Sfx();
-NoStopSfx:
-    x = *AreaMusicBuffer;
-    *AreaMusicBuffer_Alt = x;
-    y = 0x00;
-    *NoteLengthTblAdder = y;
-    *AreaMusicBuffer = y;
-    if (a != TimeRunningOutMusic) {
-        goto FindEventMusicHeader;
-    }
-    x = 0x08;
-    *NoteLengthTblAdder = x;
-    goto FindEventMusicHeader;
+//     a = *EventMusicQueue;
+//     if (a) {
+//         goto LoadEventMusic;
+//     }
+//     a = *AreaMusicQueue;
+//     if (a) {
+//         goto LoadAreaMusic;
+//     }
+//     a = *EventMusicBuffer;
+//     a |= *AreaMusicBuffer;
+//     if (a) {
+//         goto HandleSquare2Music;
+//     }
+//     return;
 
-LoadAreaMusic:
-    if (a != 0x04) {
-        goto NoStop1;
-    }
-    StopSquare1Sfx();
-NoStop1:
-    y = 0x10;
-GMLoopB:
-    *GroundMusicHeaderOfs = y;
+// LoadEventMusic:
+//     *EventMusicBuffer = a;
+//     if (a != DeathMusic) {
+//         goto NoStopSfx;
+//     }
+//     StopSquare1Sfx();
+//     StopSquare2Sfx();
+// NoStopSfx:
+//     x = *AreaMusicBuffer;
+//     *AreaMusicBuffer_Alt = x;
+//     y = 0x00;
+//     *NoteLengthTblAdder = y;
+//     *AreaMusicBuffer = y;
+//     if (a != TimeRunningOutMusic) {
+//         goto FindEventMusicHeader;
+//     }
+//     x = 0x08;
+//     *NoteLengthTblAdder = x;
+//     goto FindEventMusicHeader;
 
-HandleAreaMusicLoopB:
-    y = 0x00;
-    *EventMusicBuffer = y;
-    *AreaMusicBuffer = a;
-    if (a != 0x01) {
-        goto FindAreaMusicHeader;
-    }
-    ++*GroundMusicHeaderOfs;
-    y = *GroundMusicHeaderOfs;
-    if (y != 0x32) {
-        goto LoadHeader;
-    }
-    y = 0x11;
-    goto GMLoopB;
+// LoadAreaMusic:
+//     if (a != 0x04) {
+//         goto NoStop1;
+//     }
+//     StopSquare1Sfx();
+// NoStop1:
+//     y = 0x10;
+// GMLoopB:
+//     *GroundMusicHeaderOfs = y;
 
-FindAreaMusicHeader:
-    y = 0x08;
-    *MusicOffset_Square2 = y;
+// HandleAreaMusicLoopB:
+//     y = 0x00;
+//     *EventMusicBuffer = y;
+//     *AreaMusicBuffer = a;
+//     if (a != 0x01) {
+//         goto FindAreaMusicHeader;
+//     }
+//     ++*GroundMusicHeaderOfs;
+//     y = *GroundMusicHeaderOfs;
+//     if (y != 0x32) {
+//         goto LoadHeader;
+//     }
+//     y = 0x11;
+//     goto GMLoopB;
 
-FindEventMusicHeader:
-    ++y;
-    c = (a & 0x01) ? true : false;
-    a >>= 1;
-    if (!c) {
-        goto FindEventMusicHeader;
-    }
+// FindAreaMusicHeader:
+//     y = 0x08;
+//     *MusicOffset_Square2 = y;
 
-LoadHeader:
-    a = MusicHeaderOffsetData[y];
-    y = a;
-    a = MusicHeaderData[y];
-    *NoteLenLookupTblOfs = a;
-    a = MusicHeaderData[y+1];
-    *MusicDataLow = a;
-    a = MusicHeaderData[y+2];
-    *MusicDataHigh = a;
-    switch (*MusicDataLow|(*MusicDataHigh<<8)) {
-        case 0xfc72: MusicData = TimeRunOutMusData; break;
-        case 0xf9b8: MusicData = Star_CloudMData; break;
-        case 0xfcb0: MusicData = WinLevelMusData; break;
-        case 0xfd11: MusicData = UndergroundMusData; break;
-        case 0xfa1c: MusicData = SilenceData; break;
-        case 0xfba4: MusicData = CastleMusData; break;
-        case 0xfec8: MusicData = VictoryMusData; break;
-        case 0xfc45: MusicData = GameOverMusData; break;
-        case 0xfd52: MusicData = WaterMusData; break;
-        case 0xfe51: MusicData = EndOfCastleMusData; break;
-        case 0xfa01: MusicData = GroundM_P1Data; break;
-        case 0xfa49: MusicData = GroundM_P2AData; break;
-        case 0xfa75: MusicData = GroundM_P2BData; break;
-        case 0xfa9d: MusicData = GroundM_P2CData; break;
-        case 0xfac2: MusicData = GroundM_P3AData; break;
-        case 0xfadb: MusicData = GroundM_P3BData; break;
-        case 0xfaf9: MusicData = GroundMLdInData; break;
-        case 0xfb25: MusicData = GroundM_P4AData; break;
-        case 0xfb4b: MusicData = GroundM_P4BData; break;
-        case 0xfb74: MusicData = GroundM_P4CData; break;
-        case 0xfb72: MusicData = DeathMusData; break;
-    }
-    a = MusicHeaderData[y+3];
-    *MusicOffset_Triangle = a;
-    a = MusicHeaderData[y+4];
-    *MusicOffset_Square1 = a;
-    a = MusicHeaderData[y+5];
-    *MusicOffset_Noise = a;
-    *NoiseDataLoopbackOfs = a;
-    a = 0x01;
-    *Squ2_NoteLenCounter = a;
-    *Squ1_NoteLenCounter = a;
-    *Tri_NoteLenCounter = a;
-    *Noise_BeatLenCounter = a;
-    a = 0x00;
-    *MusicOffset_Square2 = a;
-    *AltRegContentFlag = a;
-    a = 0x0b;
-    apu_write_snd_chn(a);
-    a = 0x0f;
-    apu_write_snd_chn(a);
+// FindEventMusicHeader:
+//     ++y;
+//     c = (a & 0x01) ? true : false;
+//     a >>= 1;
+//     if (!c) {
+//         goto FindEventMusicHeader;
+//     }
 
-HandleSquare2Music:
-    if (--*Squ2_NoteLenCounter) {
-        goto MiscSqu2MusicTasks;
-    }
-    y = *MusicOffset_Square2;
-    ++*MusicOffset_Square2;
-    a = MusicData[y];
-    if (!a) {
-        goto EndOfMusicData;
-    }
-    if ((int8_t)a >= 0) {
-        goto Squ2NoteHandler;
-    }
-    goto Squ2LengthHandler;
+// LoadHeader:
+//     a = MusicHeaderOffsetData[y];
+//     y = a;
+//     a = MusicHeaderData[y];
+//     *NoteLenLookupTblOfs = a;
+//     a = MusicHeaderData[y+1];
+//     *MusicDataLow = a;
+//     a = MusicHeaderData[y+2];
+//     *MusicDataHigh = a;
+//     switch (*MusicDataLow|(*MusicDataHigh<<8)) {
+//         case 0xfc72: MusicData = TimeRunOutMusData; break;
+//         case 0xf9b8: MusicData = Star_CloudMData; break;
+//         case 0xfcb0: MusicData = WinLevelMusData; break;
+//         case 0xfd11: MusicData = UndergroundMusData; break;
+//         case 0xfa1c: MusicData = SilenceData; break;
+//         case 0xfba4: MusicData = CastleMusData; break;
+//         case 0xfec8: MusicData = VictoryMusData; break;
+//         case 0xfc45: MusicData = GameOverMusData; break;
+//         case 0xfd52: MusicData = WaterMusData; break;
+//         case 0xfe51: MusicData = EndOfCastleMusData; break;
+//         case 0xfa01: MusicData = GroundM_P1Data; break;
+//         case 0xfa49: MusicData = GroundM_P2AData; break;
+//         case 0xfa75: MusicData = GroundM_P2BData; break;
+//         case 0xfa9d: MusicData = GroundM_P2CData; break;
+//         case 0xfac2: MusicData = GroundM_P3AData; break;
+//         case 0xfadb: MusicData = GroundM_P3BData; break;
+//         case 0xfaf9: MusicData = GroundMLdInData; break;
+//         case 0xfb25: MusicData = GroundM_P4AData; break;
+//         case 0xfb4b: MusicData = GroundM_P4BData; break;
+//         case 0xfb74: MusicData = GroundM_P4CData; break;
+//         case 0xfb72: MusicData = DeathMusData; break;
+//     }
+//     a = MusicHeaderData[y+3];
+//     *MusicOffset_Triangle = a;
+//     a = MusicHeaderData[y+4];
+//     *MusicOffset_Square1 = a;
+//     a = MusicHeaderData[y+5];
+//     *MusicOffset_Noise = a;
+//     *NoiseDataLoopbackOfs = a;
+//     a = 0x01;
+//     *Squ2_NoteLenCounter = a;
+//     *Squ1_NoteLenCounter = a;
+//     *Tri_NoteLenCounter = a;
+//     *Noise_BeatLenCounter = a;
+//     a = 0x00;
+//     *MusicOffset_Square2 = a;
+//     *AltRegContentFlag = a;
+//     a = 0x0b;
+//     apu_write_snd_chn(a);
+//     a = 0x0f;
+//     apu_write_snd_chn(a);
 
-EndOfMusicData:
-    a = *EventMusicBuffer;
-    if (a != TimeRunningOutMusic) {
-        goto NotTRO;
-    }
-    a = *AreaMusicBuffer_Alt;
-    if (a) {
-        goto MusicLoopBack;
-    }
-NotTRO:
-    a &= VictoryMusic;
-    if (a) {
-        goto VictoryMLoopBack;
-    }
-    a = *AreaMusicBuffer;
-    a &= 0x5f;
-    if (a) {
-        goto MusicLoopBack;
-    }
-    a = 0x00;
-    *AreaMusicBuffer = a;
-    *EventMusicBuffer = a;
-    apu_write_tri_linear(a);
-    a = 0x90;
-    apu_write_sq1_vol(a);
-    apu_write_sq2_vol(a);
-    return;
+// HandleSquare2Music:
+//     if (--*Squ2_NoteLenCounter) {
+//         goto MiscSqu2MusicTasks;
+//     }
+//     y = *MusicOffset_Square2;
+//     ++*MusicOffset_Square2;
+//     a = MusicData[y];
+//     if (!a) {
+//         goto EndOfMusicData;
+//     }
+//     if ((int8_t)a >= 0) {
+//         goto Squ2NoteHandler;
+//     }
+//     goto Squ2LengthHandler;
 
-MusicLoopBack:
-    goto HandleAreaMusicLoopB;
+// EndOfMusicData:
+//     a = *EventMusicBuffer;
+//     if (a != TimeRunningOutMusic) {
+//         goto NotTRO;
+//     }
+//     a = *AreaMusicBuffer_Alt;
+//     if (a) {
+//         goto MusicLoopBack;
+//     }
+// NotTRO:
+//     a &= VictoryMusic;
+//     if (a) {
+//         goto VictoryMLoopBack;
+//     }
+//     a = *AreaMusicBuffer;
+//     a &= 0x5f;
+//     if (a) {
+//         goto MusicLoopBack;
+//     }
+//     a = 0x00;
+//     *AreaMusicBuffer = a;
+//     *EventMusicBuffer = a;
+//     apu_write_tri_linear(a);
+//     a = 0x90;
+//     apu_write_sq1_vol(a);
+//     apu_write_sq2_vol(a);
+//     return;
 
-VictoryMLoopBack:
-    goto LoadEventMusic;
+// MusicLoopBack:
+//     goto HandleAreaMusicLoopB;
 
-Squ2LengthHandler:
-    a = ProcessLengthData(a);
-    *Squ2_NoteLenBuffer = a;
-    y = *MusicOffset_Square2;
-    ++*MusicOffset_Square2;
-    a = MusicData[y];
+// VictoryMLoopBack:
+//     goto LoadEventMusic;
 
-Squ2NoteHandler:
-    x = *Square2SoundBuffer;
-    if (x) {
-        goto SkipFqL1;
-    }
-    a = SetFreq_Squ2(a);
-    x = 0x04;
-    y = a;
-    if (!a) {
-        goto Rest;
-    }
-    LoadControlRegs(&a, &x, &y);
-Rest:
-    *Squ2_EnvelopeDataCtrl = a;
-    Dump_Sq2_Regs(x, y);
-SkipFqL1:
-    a = *Squ2_NoteLenBuffer;
-    *Squ2_NoteLenCounter = a;
+// Squ2LengthHandler:
+//     a = ProcessLengthData(a);
+//     *Squ2_NoteLenBuffer = a;
+//     y = *MusicOffset_Square2;
+//     ++*MusicOffset_Square2;
+//     a = MusicData[y];
 
-MiscSqu2MusicTasks:
-    a = *Square2SoundBuffer;
-    if (a) {
-        goto HandleSquare1Music;
-    }
-    a = *EventMusicBuffer;
-    a &= 0x91;
-    if (a) {
-        goto HandleSquare1Music;
-    }
-    y = *Squ2_EnvelopeDataCtrl;
-    if (!y) {
-        goto NoDecEnv1;
-    }
-    --*Squ2_EnvelopeDataCtrl;
-NoDecEnv1:
-    a = LoadEnvelopeData(y);
-    apu_write_sq2_vol(a);
-    x = 0x7f;
-    apu_write_sq2_sweep(x);
+// Squ2NoteHandler:
+//     x = *Square2SoundBuffer;
+//     if (x) {
+//         goto SkipFqL1;
+//     }
+//     a = SetFreq_Squ2(a);
+//     x = 0x04;
+//     y = a;
+//     if (!a) {
+//         goto Rest;
+//     }
+//     LoadControlRegs(&a, &x, &y);
+// Rest:
+//     *Squ2_EnvelopeDataCtrl = a;
+//     Dump_Sq2_Regs(x, y);
+// SkipFqL1:
+//     a = *Squ2_NoteLenBuffer;
+//     *Squ2_NoteLenCounter = a;
 
-HandleSquare1Music:
-    y = *MusicOffset_Square1;
-    if (!y) {
-        goto HandleTriangleMusic;
-    }
-    if (--*Squ1_NoteLenCounter) {
-        goto MiscSqu1MusicTasks;
-    }
+// MiscSqu2MusicTasks:
+//     a = *Square2SoundBuffer;
+//     if (a) {
+//         goto HandleSquare1Music;
+//     }
+//     a = *EventMusicBuffer;
+//     a &= 0x91;
+//     if (a) {
+//         goto HandleSquare1Music;
+//     }
+//     y = *Squ2_EnvelopeDataCtrl;
+//     if (!y) {
+//         goto NoDecEnv1;
+//     }
+//     --*Squ2_EnvelopeDataCtrl;
+// NoDecEnv1:
+//     a = LoadEnvelopeData(y);
+//     apu_write_sq2_vol(a);
+//     x = 0x7f;
+//     apu_write_sq2_sweep(x);
 
-FetchSqu1MusicData:
-    y = *MusicOffset_Square1;
-    ++*MusicOffset_Square1;
-    a = MusicData[y];
-    if (a) {
-        goto Squ1NoteHandler;
-    }
-    a = 0x83;
-    apu_write_sq1_vol(a);
-    a = 0x94;
-    apu_write_sq1_sweep(a);
-    *AltRegContentFlag = a;
-    goto FetchSqu1MusicData;
+// HandleSquare1Music:
+//     y = *MusicOffset_Square1;
+//     if (!y) {
+//         goto HandleTriangleMusic;
+//     }
+//     if (--*Squ1_NoteLenCounter) {
+//         goto MiscSqu1MusicTasks;
+//     }
 
-Squ1NoteHandler:
-    AlternateLengthHandler(&a, &x);
-    *Squ1_NoteLenCounter = a;
-    y = *Square1SoundBuffer;
-    if (y) {
-        goto HandleTriangleMusic;
-    }
-    a = x;
-    a &= 0x3e;
-    a = SetFreq_Squ1(a);
-    x = 0x00;
-    y = a;
-    if (!a) {
-        goto SkipCtrlL;
-    }
-    LoadControlRegs(&a, &x, &y);
-SkipCtrlL:
-    *Squ1_EnvelopeDataCtrl = a;
-    Dump_Squ1_Regs(x, y);
+// FetchSqu1MusicData:
+//     y = *MusicOffset_Square1;
+//     ++*MusicOffset_Square1;
+//     a = MusicData[y];
+//     if (a) {
+//         goto Squ1NoteHandler;
+//     }
+//     a = 0x83;
+//     apu_write_sq1_vol(a);
+//     a = 0x94;
+//     apu_write_sq1_sweep(a);
+//     *AltRegContentFlag = a;
+//     goto FetchSqu1MusicData;
 
-MiscSqu1MusicTasks:
-    a = *Square1SoundBuffer;
-    if (a) {
-        goto HandleTriangleMusic;
-    }
-    a = *EventMusicBuffer;
-    a &= 0x91;
-    if (a) {
-        goto DeathMAltReg;
-    }
-    y = *Squ1_EnvelopeDataCtrl;
-    if (!y) {
-        goto NoDecEnv2;
-    }
-    --*Squ1_EnvelopeDataCtrl;
-NoDecEnv2:
-    a = LoadEnvelopeData(y);
-    apu_write_sq1_vol(a);
-DeathMAltReg:
-    a = *AltRegContentFlag;
-    if (a) {
-        goto DoAltLoad;
-    }
-    a = 0x7f;
-DoAltLoad:
-    apu_write_sq1_sweep(a);
+// Squ1NoteHandler:
+//     AlternateLengthHandler(&a, &x);
+//     *Squ1_NoteLenCounter = a;
+//     y = *Square1SoundBuffer;
+//     if (y) {
+//         goto HandleTriangleMusic;
+//     }
+//     a = x;
+//     a &= 0x3e;
+//     a = SetFreq_Squ1(a);
+//     x = 0x00;
+//     y = a;
+//     if (!a) {
+//         goto SkipCtrlL;
+//     }
+//     LoadControlRegs(&a, &x, &y);
+// SkipCtrlL:
+//     *Squ1_EnvelopeDataCtrl = a;
+//     Dump_Squ1_Regs(x, y);
 
-HandleTriangleMusic:
-    a = *MusicOffset_Triangle;
-    if (--*Tri_NoteLenCounter) {
-        goto HandleNoiseMusic;
-    }
-    y = *MusicOffset_Triangle;
-    ++*MusicOffset_Triangle;
-    a = MusicData[y];
-    if (!a) {
-        goto LoadTriCtrlReg;
-    }
-    if ((int8_t)a >= 0) {
-        goto TriNoteHandler;
-    }
-    a = ProcessLengthData(a);
-    *Tri_NoteLenBuffer = a;
-    a = 0x1f;
-    apu_write_tri_linear(a);
-    y = *MusicOffset_Triangle;
-    ++*MusicOffset_Triangle;
-    a = MusicData[y];
-    if (!a) {
-        goto LoadTriCtrlReg;
-    }
+// MiscSqu1MusicTasks:
+//     a = *Square1SoundBuffer;
+//     if (a) {
+//         goto HandleTriangleMusic;
+//     }
+//     a = *EventMusicBuffer;
+//     a &= 0x91;
+//     if (a) {
+//         goto DeathMAltReg;
+//     }
+//     y = *Squ1_EnvelopeDataCtrl;
+//     if (!y) {
+//         goto NoDecEnv2;
+//     }
+//     --*Squ1_EnvelopeDataCtrl;
+// NoDecEnv2:
+//     a = LoadEnvelopeData(y);
+//     apu_write_sq1_vol(a);
+// DeathMAltReg:
+//     a = *AltRegContentFlag;
+//     if (a) {
+//         goto DoAltLoad;
+//     }
+//     a = 0x7f;
+// DoAltLoad:
+//     apu_write_sq1_sweep(a);
 
-TriNoteHandler:
-    SetFreq_Tri(a);
-    x = *Tri_NoteLenBuffer;
-    *Tri_NoteLenCounter = x;
-    a = *EventMusicBuffer;
-    a &= 0x6e;
-    if (a) {
-        goto NotDOrD4;
-    }
-    a = *AreaMusicBuffer;
-    a &= 0x0a;
-    if (!a) {
-        goto HandleNoiseMusic;
-    }
-NotDOrD4:
-    a = x;
-    if (a >= 0x12) {
-        goto LongN;
-    }
-    a = *EventMusicBuffer;
-    a &= EndOfCastleMusic;
-    if (!a) {
-        goto MediN;
-    }
-    a = 0x0f;
-    goto LoadTriCtrlReg;
-MediN:
-    a = 0x1f;
-    goto LoadTriCtrlReg;
-LongN:
-    a = 0xff;
+// HandleTriangleMusic:
+//     a = *MusicOffset_Triangle;
+//     if (--*Tri_NoteLenCounter) {
+//         goto HandleNoiseMusic;
+//     }
+//     y = *MusicOffset_Triangle;
+//     ++*MusicOffset_Triangle;
+//     a = MusicData[y];
+//     if (!a) {
+//         goto LoadTriCtrlReg;
+//     }
+//     if ((int8_t)a >= 0) {
+//         goto TriNoteHandler;
+//     }
+//     a = ProcessLengthData(a);
+//     *Tri_NoteLenBuffer = a;
+//     a = 0x1f;
+//     apu_write_tri_linear(a);
+//     y = *MusicOffset_Triangle;
+//     ++*MusicOffset_Triangle;
+//     a = MusicData[y];
+//     if (!a) {
+//         goto LoadTriCtrlReg;
+//     }
 
-LoadTriCtrlReg:
-    apu_write_tri_linear(a);
+// TriNoteHandler:
+//     SetFreq_Tri(a);
+//     x = *Tri_NoteLenBuffer;
+//     *Tri_NoteLenCounter = x;
+//     a = *EventMusicBuffer;
+//     a &= 0x6e;
+//     if (a) {
+//         goto NotDOrD4;
+//     }
+//     a = *AreaMusicBuffer;
+//     a &= 0x0a;
+//     if (!a) {
+//         goto HandleNoiseMusic;
+//     }
+// NotDOrD4:
+//     a = x;
+//     if (a >= 0x12) {
+//         goto LongN;
+//     }
+//     a = *EventMusicBuffer;
+//     a &= EndOfCastleMusic;
+//     if (!a) {
+//         goto MediN;
+//     }
+//     a = 0x0f;
+//     goto LoadTriCtrlReg;
+// MediN:
+//     a = 0x1f;
+//     goto LoadTriCtrlReg;
+// LongN:
+//     a = 0xff;
 
-HandleNoiseMusic:
-    a = *AreaMusicBuffer;
-    a &= 0xf3;
-    if (!a) {
-        goto ExitMusicHandler;
-    }
-    if (--*Noise_BeatLenCounter) {
-        goto ExitMusicHandler;
-    }
+// LoadTriCtrlReg:
+//     apu_write_tri_linear(a);
 
-FetchNoiseBeatData:
-    y = *MusicOffset_Noise;
-    ++*MusicOffset_Noise;
-    a = MusicData[y];
-    if (a) {
-        goto NoiseBeatHandler;
-    }
-    a = *NoiseDataLoopbackOfs;
-    *MusicOffset_Noise = a;
-    if (a) {
-        goto FetchNoiseBeatData;
-    }
+// HandleNoiseMusic:
+//     a = *AreaMusicBuffer;
+//     a &= 0xf3;
+//     if (!a) {
+//         goto ExitMusicHandler;
+//     }
+//     if (--*Noise_BeatLenCounter) {
+//         goto ExitMusicHandler;
+//     }
 
-NoiseBeatHandler:
-    AlternateLengthHandler(&a, &x);
-    *Noise_BeatLenCounter = a;
-    a = x;
-    a &= 0x3e;
-    if (!a) {
-        goto SilentBeat;
-    }
-    if (a == 0x30) {
-        goto LongBeat;
-    }
-    if (a == 0x20) {
-        goto StrongBeat;
-    }
-    a &= 0x10;
-    if (!a) {
-        goto SilentBeat;
-    }
-    a = 0x1c;
-    x = 0x03;
-    y = 0x18;
-    goto PlayBeat;
+// FetchNoiseBeatData:
+//     y = *MusicOffset_Noise;
+//     ++*MusicOffset_Noise;
+//     a = MusicData[y];
+//     if (a) {
+//         goto NoiseBeatHandler;
+//     }
+//     a = *NoiseDataLoopbackOfs;
+//     *MusicOffset_Noise = a;
+//     if (a) {
+//         goto FetchNoiseBeatData;
+//     }
 
-StrongBeat:
-    a = 0x1c;
-    x = 0x0c;
-    y = 0x18;
-    goto PlayBeat;
+// NoiseBeatHandler:
+//     AlternateLengthHandler(&a, &x);
+//     *Noise_BeatLenCounter = a;
+//     a = x;
+//     a &= 0x3e;
+//     if (!a) {
+//         goto SilentBeat;
+//     }
+//     if (a == 0x30) {
+//         goto LongBeat;
+//     }
+//     if (a == 0x20) {
+//         goto StrongBeat;
+//     }
+//     a &= 0x10;
+//     if (!a) {
+//         goto SilentBeat;
+//     }
+//     a = 0x1c;
+//     x = 0x03;
+//     y = 0x18;
+//     goto PlayBeat;
 
-LongBeat:
-    a = 0x1c;
-    x = 0x03;
-    y = 0x58;
-    goto PlayBeat;
+// StrongBeat:
+//     a = 0x1c;
+//     x = 0x0c;
+//     y = 0x18;
+//     goto PlayBeat;
 
-SilentBeat:
-    a = 0x10;
+// LongBeat:
+//     a = 0x1c;
+//     x = 0x03;
+//     y = 0x58;
+//     goto PlayBeat;
 
-PlayBeat:
-    apu_write_noise_vol(a);
-    apu_write_noise_lo(x);
-    apu_write_noise_hi(y);
+// SilentBeat:
+//     a = 0x10;
 
-ExitMusicHandler:
-    return;
+// PlayBeat:
+//     apu_write_noise_vol(a);
+//     apu_write_noise_lo(x);
+//     apu_write_noise_hi(y);
 
-    // pc = 0xf694;
-    // cpu_execute();
+// ExitMusicHandler:
+//     return;
+
+//     // pc = 0xf694;
+//     // cpu_execute();
 }
 
 void AlternateLengthHandler(uint8_t *a, uint8_t *x) {
