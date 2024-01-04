@@ -51,6 +51,7 @@ void UpdateScreen(const uint8_t *address);
 void InitScroll(uint8_t a);
 void WritePPUReg1(uint8_t a);
 void UpdateTopScore(void);
+void TopScoreCheck(uint8_t x);
 uint8_t InitializeMemory(uint8_t y);
 void SoundEngine(void);
 void Dump_Squ1_Regs(uint8_t x, uint8_t y);
@@ -609,7 +610,7 @@ uint8_t *EventMusicBuffer       = memory + 0x07b1;
 uint8_t *PauseSoundBuffer       = memory + 0x07b2;
 
 // uint8_t *MusicData              = memory + 0xf5;
-uint8_t *MusicData;
+const uint8_t *MusicData;
 uint8_t *MusicDataLow           = memory + 0xf5;
 uint8_t *MusicDataHigh          = memory + 0xf6;
 uint8_t *MusicOffset_Square2    = memory + 0xf7;
@@ -1260,7 +1261,6 @@ InitATLoop:
     InitScroll(a);              // initialize scroll registers to zero
 }
 
-// $8e5c
 void ReadJoypads(void) {
     uint8_t a, x;
     bool n, z, c;
@@ -1275,8 +1275,6 @@ void ReadJoypads(void) {
     ReadPortBits(x);
 }
 
-// inputs:              x
-// possible outputs:    a, x, y, n, z, c
 void ReadPortBits(uint8_t x) {
     static const uint8_t (*cpu_read_joy[2])(void) = {
         cpu_read_joy1, cpu_read_joy2
