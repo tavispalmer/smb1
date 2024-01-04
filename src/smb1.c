@@ -29,7 +29,9 @@ void OperModeExecutionTree(void);
 void MoveAllSpritesOffscreen(void);
 void MoveSpritesOffscreen(void);
 void TitleScreenMode(void);
+void GameMenuRoutine(void);
 void VictoryMode(void);
+void ScreenRoutines(void);
 const uint8_t WaterPaletteData[];
 const uint8_t GroundPaletteData[];
 const uint8_t UndergroundPaletteData[];
@@ -54,6 +56,8 @@ void InitScroll(uint8_t a);
 void WritePPUReg1(uint8_t a);
 void UpdateTopScore(void);
 void TopScoreCheck(uint8_t x);
+void InitializeGame(void);
+void PrimaryGameSetup(void);
 uint8_t InitializeMemory(uint8_t y);
 void GameOverMode(void);
 void GameMode(void);
@@ -932,8 +936,8 @@ SkipMainOper:
     // rti                              // we are done until the next frame!
 }
 
-// inputs:              none
-// possible outputs:    a, y, n, z, c
+// -------------------------------------------------------------------------------------
+
 void PauseRoutine(void) {
     uint8_t a, y;
     bool n, z, c;
@@ -976,8 +980,9 @@ ExitPause:
     // rts
 }
 
-// inputs:              none
-// possible outputs:    a, x, y, n, v, z, c
+// -------------------------------------------------------------------------------------
+// $00 - used for preset value
+
 void SpriteShuffler(void) {
     uint8_t a, x, y;
     bool n, v, z, c;
@@ -1029,8 +1034,12 @@ SetMiscOffset:
     // rts
 }
 
-// $8212
+// -------------------------------------------------------------------------------------
+
 void OperModeExecutionTree(void) {
+    // this is the heart of the entire program,
+    // most of what goes on starts here
+
     const void (*f[])(void) = {
         TitleScreenMode,
         GameMode,
@@ -1041,9 +1050,8 @@ void OperModeExecutionTree(void) {
     f[*OperMode]();
 }
 
-// $8220
-// inputs:              none
-// possible outputs:    a, y, n, z
+// -------------------------------------------------------------------------------------
+
 void MoveAllSpritesOffscreen(void) {
     uint8_t a, y;
     bool n, z;
@@ -1061,9 +1069,6 @@ SprInitLoop:
     // rts
 }
 
-// $8223
-// inputs:              none
-// possible outputs:    a, y, n, z
 void MoveSpritesOffscreen(void) {
     uint8_t a, y;
     bool n, z;
@@ -1080,13 +1085,34 @@ SprInitLoop:
     // rts
 }
 
+// -------------------------------------------------------------------------------------
+
 void TitleScreenMode(void) {
-    pc = 0x8231;
+    fprintf(stderr, "OperMode_Task = %d\n", *OperMode_Task);
+    const void (*f[])(void) = {
+        InitializeGame,
+        ScreenRoutines,
+        PrimaryGameSetup,
+        GameMenuRoutine
+    };
+
+    f[*OperMode_Task]();
+}
+
+// -------------------------------------------------------------------------------------
+
+void GameMenuRoutine(void) {
+    pc = 0x8245;
     cpu_execute();
 }
 
 void VictoryMode(void) {
     pc = 0x838b;
+    cpu_execute();
+}
+
+void ScreenRoutines(void) {
+    pc = 0x8567;
     cpu_execute();
 }
 
@@ -1446,6 +1472,16 @@ CopyScore:
     bcc(CopyScore);
 NoTopSc:
     // rts
+}
+
+void InitializeGame(void) {
+    pc = 0x8fcf;
+    cpu_execute();
+}
+
+void PrimaryGameSetup(void) {
+    pc = 0x9061;
+    cpu_execute();
 }
 
 // $90cc
