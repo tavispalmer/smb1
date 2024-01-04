@@ -55,9 +55,9 @@ uint8_t InitializeMemory(uint8_t y);
 void SoundEngine(void);
 void Dump_Squ1_Regs(uint8_t x, uint8_t y);
 bool PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y);
-bool SetFreq_Squ1(uint8_t a);
-bool Dump_Freq_Regs(uint8_t a, uint8_t x);
-void SetFreq_Squ2(uint8_t a);
+void SetFreq_Squ1(uint8_t *a, uint8_t *x, uint8_t *y, bool *z);
+void Dump_Freq_Regs(uint8_t *a, uint8_t *x, uint8_t *y, bool *z);
+void SetFreq_Squ2(uint8_t *a, uint8_t *x, uint8_t *y, bool *z);
 const uint8_t SwimStompEnvelopeData[0xe];
 void Square1SfxHandler(void);
 void StopSquare1Sfx(void);
@@ -65,7 +65,7 @@ void Square2SfxHandler(void);
 void StopSquare2Sfx(void);
 void NoiseSfxHandler(void);
 void MusicHandler(void);
-void AlternateLengthHandler(uint8_t *a, uint8_t *x);
+void AlternateLengthHandler(uint8_t *a, uint8_t *x, bool c);
 uint8_t ProcessLengthData(uint8_t a);
 void LoadControlRegs(uint8_t *a, uint8_t *x, uint8_t *y);
 uint8_t LoadEnvelopeData(uint8_t y);
@@ -629,109 +629,109 @@ uint8_t *AltRegContentFlag      = memory + 0x07ca;
 // CONSTANTS
 
 // sound effects constants
-const uint8_t Sfx_SmallJump         = 0x80;
-const uint8_t Sfx_Flagpole          = 0x40;
-const uint8_t Sfx_Fireball          = 0x20;
-const uint8_t Sfx_PipeDown_Injury   = 0x10;
-const uint8_t Sfx_EnemySmack        = 0x08;
-const uint8_t Sfx_EnemyStomp        = 0x04;
-const uint8_t Sfx_Bump              = 0x02;
-const uint8_t Sfx_BigJump           = 0x01;
+#define Sfx_SmallJump           ((uint8_t)0x80)
+#define Sfx_Flagpole            ((uint8_t)0x40)
+#define Sfx_Fireball            ((uint8_t)0x20)
+#define Sfx_PipeDown_Injury     ((uint8_t)0x10)
+#define Sfx_EnemySmack          ((uint8_t)0x08)
+#define Sfx_EnemyStomp          ((uint8_t)0x04)
+#define Sfx_Bump                ((uint8_t)0x02)
+#define Sfx_BigJump             ((uint8_t)0x01)
 
-const uint8_t Sfx_BowserFall        = 0x80;
-const uint8_t Sfx_ExtraLife         = 0x40;
-const uint8_t Sfx_PowerUpGrab       = 0x20;
-const uint8_t Sfx_TimerTick         = 0x10;
-const uint8_t Sfx_Blast             = 0x08;
-const uint8_t Sfx_GrowVine          = 0x04;
-const uint8_t Sfx_GrowPowerUp       = 0x02;
-const uint8_t Sfx_CoinGrab          = 0x01;
+#define Sfx_BowserFall          ((uint8_t)0x80)
+#define Sfx_ExtraLife           ((uint8_t)0x40)
+#define Sfx_PowerUpGrab         ((uint8_t)0x20)
+#define Sfx_TimerTick           ((uint8_t)0x10)
+#define Sfx_Blast               ((uint8_t)0x08)
+#define Sfx_GrowVine            ((uint8_t)0x04)
+#define Sfx_GrowPowerUp         ((uint8_t)0x02)
+#define Sfx_CoinGrab            ((uint8_t)0x01)
 
-const uint8_t Sfx_BowserFlame       = 0x02;
-const uint8_t Sfx_BrickShatter      = 0x01;
+#define Sfx_BowserFlame         ((uint8_t)0x02)
+#define Sfx_BrickShatter        ((uint8_t)0x01)
 
 // music constants
-const uint8_t Silence               = 0x80;
+#define Silence                 ((uint8_t)0x80)
 
-const uint8_t StarPowerMusic        = 0x40;
-const uint8_t PipeIntroMusic        = 0x20;
-const uint8_t CloudMusic            = 0x10;
-const uint8_t CastleMusic           = 0x08;
-const uint8_t UndergroundMusic      = 0x04;
-const uint8_t WaterMusic            = 0x02;
-const uint8_t GroundMusic           = 0x01;
+#define StarPowerMusic          ((uint8_t)0x40)
+#define PipeIntroMusic          ((uint8_t)0x20)
+#define CloudMusic              ((uint8_t)0x10)
+#define CastleMusic             ((uint8_t)0x08)
+#define UndergroundMusic        ((uint8_t)0x04)
+#define WaterMusic              ((uint8_t)0x02)
+#define GroundMusic             ((uint8_t)0x01)
 
-const uint8_t TimeRunningOutMusic   = 0x40;
-const uint8_t EndOfLevelMusic       = 0x20;
-const uint8_t AltGameOverMusic      = 0x10;
-const uint8_t EndOfCastleMusic      = 0x08;
-const uint8_t VictoryMusic          = 0x04;
-const uint8_t GameOverMusic         = 0x02;
-const uint8_t DeathMusic            = 0x01;
+#define TimeRunningOutMusic     ((uint8_t)0x40)
+#define EndOfLevelMusic         ((uint8_t)0x20)
+#define AltGameOverMusic        ((uint8_t)0x10)
+#define EndOfCastleMusic        ((uint8_t)0x08)
+#define VictoryMusic            ((uint8_t)0x04)
+#define GameOverMusic           ((uint8_t)0x02)
+#define DeathMusic              ((uint8_t)0x01)
 
 //enemy object constants
-const uint8_t GreenKoopa            = 0x00;
-const uint8_t BuzzyBeetle           = 0x02;
-const uint8_t RedKoopa              = 0x03;
-const uint8_t HammerBro             = 0x05;
-const uint8_t Goomba                = 0x06;
-const uint8_t Bloober               = 0x07;
-const uint8_t BulletBill_FrenzyVar  = 0x08;
-const uint8_t GreyCheepCheep        = 0x0a;
-const uint8_t RedCheepCheep         = 0x0b;
-const uint8_t Podoboo               = 0x0c;
-const uint8_t PiranhaPlant          = 0x0d;
-const uint8_t GreenParatroopaJump   = 0x0e;
-const uint8_t RedParatroopa         = 0x0f;
-const uint8_t GreenParatroopaFly    = 0x10;
-const uint8_t Lakitu                = 0x11;
-const uint8_t Spiny                 = 0x12;
-const uint8_t FlyCheepCheepFrenzy   = 0x14;
-const uint8_t FlyingCheepCheep      = 0x14;
-const uint8_t BowserFlame           = 0x15;
-const uint8_t Fireworks             = 0x16;
-const uint8_t BBill_CCheep_Frenzy   = 0x17;
-const uint8_t Stop_Frenzy           = 0x18;
-const uint8_t Bowser                = 0x2d;
-const uint8_t PowerUpObject         = 0x2e;
-const uint8_t VineObject            = 0x2f;
-const uint8_t FlagpoleFlagObject    = 0x30;
-const uint8_t StarFlagObject        = 0x31;
-const uint8_t JumpspringObject      = 0x32;
-const uint8_t BulletBill_CannonVar  = 0x33;
-const uint8_t RetainerObject        = 0x35;
-const uint8_t TallEnemy             = 0x09;
+#define GreenKoopa              ((uint8_t)0x00)
+#define BuzzyBeetle             ((uint8_t)0x02)
+#define RedKoopa                ((uint8_t)0x03)
+#define HammerBro               ((uint8_t)0x05)
+#define Goomba                  ((uint8_t)0x06)
+#define Bloober                 ((uint8_t)0x07)
+#define BulletBill_FrenzyVar    ((uint8_t)0x08)
+#define GreyCheepCheep          ((uint8_t)0x0a)
+#define RedCheepCheep           ((uint8_t)0x0b)
+#define Podoboo                 ((uint8_t)0x0c)
+#define PiranhaPlant            ((uint8_t)0x0d)
+#define GreenParatroopaJump     ((uint8_t)0x0e)
+#define RedParatroopa           ((uint8_t)0x0f)
+#define GreenParatroopaFly      ((uint8_t)0x10)
+#define Lakitu                  ((uint8_t)0x11)
+#define Spiny                   ((uint8_t)0x12)
+#define FlyCheepCheepFrenzy     ((uint8_t)0x14)
+#define FlyingCheepCheep        ((uint8_t)0x14)
+#define BowserFlame             ((uint8_t)0x15)
+#define Fireworks               ((uint8_t)0x16)
+#define BBill_CCheep_Frenzy     ((uint8_t)0x17)
+#define Stop_Frenzy             ((uint8_t)0x18)
+#define Bowser                  ((uint8_t)0x2d)
+#define PowerUpObject           ((uint8_t)0x2e)
+#define VineObject              ((uint8_t)0x2f)
+#define FlagpoleFlagObject      ((uint8_t)0x30)
+#define StarFlagObject          ((uint8_t)0x31)
+#define JumpspringObject        ((uint8_t)0x32)
+#define BulletBill_CannonVar    ((uint8_t)0x33)
+#define RetainerObject          ((uint8_t)0x35)
+#define TallEnemy               ((uint8_t)0x09)
 
 //other constants
-const uint8_t World1 = 0;
-const uint8_t World2 = 1;
-const uint8_t World3 = 2;
-const uint8_t World4 = 3;
-const uint8_t World5 = 4;
-const uint8_t World6 = 5;
-const uint8_t World7 = 6;
-const uint8_t World8 = 7;
+#define World1  ((uint8_t)0)
+#define World2  ((uint8_t)1)
+#define World3  ((uint8_t)2)
+#define World4  ((uint8_t)3)
+#define World5  ((uint8_t)4)
+#define World6  ((uint8_t)5)
+#define World7  ((uint8_t)6)
+#define World8  ((uint8_t)7)
 
-const uint8_t WarmBootOffset            = (uint8_t)0x07d6;
-const uint8_t ColdBootOffset            = (uint8_t)0x07fe;
-const uint16_t TitleScreenDataOffset    = 0x1ec0;
-const uint16_t SoundMemory              = 0x07b0;
-const uint8_t *MusicHeaderOffsetData    = MusicHeaderData - 1;
-#define MHD MusicHeaderData
+#define WarmBootOffset          ((uint8_t)0x07d6)
+#define ColdBootOffset          ((uint8_t)0x07fe)
+#define TitleScreenDataOffset   ((uint16_t)0x1ec0)
+#define SoundMemory             ((uint16_t)0x07b0)
+#define MusicHeaderOffsetData   ((const uint8_t *)(MusicHeaderData - 1))
+#define MHD                     MusicHeaderData
 
-const uint8_t A_Button              = 0x80;
-const uint8_t B_Button              = 0x40;
-const uint8_t Select_Button         = 0x20;
-const uint8_t Start_Button          = 0x10;
-const uint8_t Up_Dir                = 0x08;
-const uint8_t Down_Dir              = 0x04;
-const uint8_t Left_Dir              = 0x02;
-const uint8_t Right_Dir             = 0x01;
+#define A_Button                ((uint8_t)0x80)
+#define B_Button                ((uint8_t)0x40)
+#define Select_Button           ((uint8_t)0x20)
+#define Start_Button            ((uint8_t)0x10)
+#define Up_Dir                  ((uint8_t)0x08)
+#define Down_Dir                ((uint8_t)0x04)
+#define Left_Dir                ((uint8_t)0x02)
+#define Right_Dir               ((uint8_t)0x01)
 
-const uint8_t TitleScreenModeValue  = 0;
-const uint8_t GameModeValue         = 1;
-const uint8_t VictoryModeValue      = 2;
-const uint8_t GameOverModeValue     = 3;
+#define TitleScreenModeValue    ((uint8_t)0)
+#define GameModeValue           ((uint8_t)1)
+#define VictoryModeValue        ((uint8_t)2)
+#define GameOverModeValue       ((uint8_t)3)
 
 // $8000
 void Start(void) {
@@ -1563,21 +1563,27 @@ void Dump_Squ1_Regs(uint8_t x, uint8_t y) {
 }
 
 bool PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y) {
+    bool z;
+
     Dump_Squ1_Regs(x, y);   // do sub to set ctrl regs for square 1, then set frequency regs
-    return SetFreq_Squ1(a);
+    SetFreq_Squ1(&a, &x, &y, &z);
+
+    return z;
 }
 
-bool SetFreq_Squ1(uint8_t a) {
-    uint8_t x;
-    bool n, z;
+void SetFreq_Squ1(uint8_t *pa, uint8_t *px, uint8_t *py, bool *pz) {
+    uint8_t a = *pa, x = *px, y = *py;
+    bool n, z = *pz;
 
-    ldx(0x00);              // set frequency reg offset for square 1 sound channel
-    return Dump_Freq_Regs(a, x);
+    ldx(0x00);  // set frequency reg offset for square 1 sound channel
+    Dump_Freq_Regs(&a, &x, &y, &z);
+
+    *pa = a, *px = x, *py = y, *pz = z;
 }
 
-bool Dump_Freq_Regs(uint8_t a, uint8_t x) {
-    uint8_t y;
-    bool n, z;
+void Dump_Freq_Regs(uint8_t *pa, uint8_t *px, uint8_t *py, bool *pz) {
+    uint8_t a = *pa, x = *px, y = *py;
+    bool n, z = *pz;
     
     static const void (*apu_write[])(uint8_t) = {
         NULL,
@@ -1602,7 +1608,9 @@ bool Dump_Freq_Regs(uint8_t a, uint8_t x) {
     ora(0x08);                  // length counter
     apu_write[x+3](a);
 NoTone:
-    return z;
+    // rts
+
+    *pa = a, *px = x, *py = y, *pz = z;
 }
 
 void Dump_Sq2_Regs(uint8_t x, uint8_t y) {
@@ -1612,24 +1620,28 @@ void Dump_Sq2_Regs(uint8_t x, uint8_t y) {
 }
 
 void PlaySqu2Sfx(uint8_t a, uint8_t x, uint8_t y) {
+    bool z;
+
     Dump_Sq2_Regs(x, y);    // do sub to set ctrl regs for square 2 sound channel
-    SetFreq_Squ2(a);
+    SetFreq_Squ2(&a, &x, &y, &z);
 }
 
-void SetFreq_Squ2(uint8_t a) {
-    uint8_t x;
-    bool n, z;
+void SetFreq_Squ2(uint8_t *pa, uint8_t *px, uint8_t *py, bool *pz) {
+    uint8_t a = *pa, x = *px, y = *py;
+    bool n, z = *pz;
 
-    ldx(0x04);              // set frequency reg offset for square 2 sound channel
-    Dump_Freq_Regs(a, x);   // unconditional branch
+    ldx(0x04);                      // set frequency reg offset for square 2 sound channel
+    Dump_Freq_Regs(&a, &x, &y, &z); // unconditional branch
+    
+    *pa = a, *px = x, *py = y, *pz = z;
 }
 
 void SetFreq_Tri(uint8_t a) {
-    uint8_t x;
+    uint8_t x, y;
     bool n, z;
 
-    ldx(0x08);              // set frequency reg offset for triangle sound channel
-    Dump_Freq_Regs(a, x);   // unconditional branch
+    ldx(0x08);                      // set frequency reg offset for triangle sound channel
+    Dump_Freq_Regs(&a, &x, &y, &z); // unconditional branch
 }
 
 const uint8_t SwimStompEnvelopeData[0xe] = {
@@ -1648,7 +1660,7 @@ PlayFlagpoleSlide:
     lda(0x40);                          // store length of flagpole sound
     sta(*Squ1_SfxLenCounter);
     lda(0x62);                          // load part of reg contents for flagpole sound
-    SetFreq_Squ1(a);
+    SetFreq_Squ1(&a, &x, &y, &z);
     ldx(0x99);                          // now load the rest
     bne(FPS2nd);
 
@@ -2035,7 +2047,7 @@ ContinueGrowItems:
     lda(0x9d);                      // load contents of other reg directly
     apu_write_sq2_vol(a);
     lda(PUp_VGrow_FreqData[y]);     // use secondary counter / 2 as offset for frequency regs
-    SetFreq_Squ2(a);
+    SetFreq_Squ2(&a, &x, &y, &z);
     return;
 
 StopGrowItems:
@@ -2128,499 +2140,425 @@ ContinueBowserFlame:
 
 // $f694
 void MusicHandler(void) {
+    uint8_t a, x, y;
+    bool n, z, c;
+
+    goto MusicHandler;
+
+ContinueMusic:
+    jmp(HandleSquare2Music);        // if we have music, start with square 2 channel
+
+MusicHandler:
+    lda(*EventMusicQueue);          // check event music queue
+    bne(LoadEventMusic);
+    lda(*AreaMusicQueue);           // check area music queue
+    bne(LoadAreaMusic);
+    lda(*EventMusicBuffer);         // check both buffers
+    ora(*AreaMusicBuffer);
+    bne(ContinueMusic); 
+    return;                         // no music, then leave
+
+LoadEventMusic:
+    sta(*EventMusicBuffer);         // copy event music queue contents to buffer
+    cmp(DeathMusic);                // is it death music?
+    bne(NoStopSfx);                 // if not, jump elsewhere
+    StopSquare1Sfx();               // stop sfx in square 1 and 2
+    StopSquare2Sfx();               // but clear only square 1's sfx buffer
+NoStopSfx:
+    ldx(*AreaMusicBuffer);
+    stx(*AreaMusicBuffer_Alt);      // save current area music buffer to be re-obtained later
+    ldy(0x00);
+    sty(*NoteLengthTblAdder);       // default value for additional length byte offset
+    sty(*AreaMusicBuffer);          // clear area music buffer
+    cmp(TimeRunningOutMusic);       // is it time running out music?
+    bne(FindEventMusicHeader);
+    ldx(0x08);                      // load offset to be added to length byte of header
+    stx(*NoteLengthTblAdder);
+    bne(FindEventMusicHeader);      // unconditional branch
+
+LoadAreaMusic:
+    cmp(0x04);                      // is it underground music?
+    bne(NoStop1);                   // no, do not stop square 1 sfx
+    StopSquare1Sfx();
+NoStop1:
+    ldy(0x10);                      // start counter used only by ground level music
+GMLoopB:
+    sty(*GroundMusicHeaderOfs);
+
+HandleAreaMusicLoopB:
+    ldy(0x00);                      // clear event music buffer
+    sty(*EventMusicBuffer);
+    sta(*AreaMusicBuffer);          // copy area music queue contents to buffer
+    cmp(0x01);                      // is it ground level music?
+    bne(FindAreaMusicHeader);
+    inc(*GroundMusicHeaderOfs);     // increment but only if playing ground level music
+    ldy(*GroundMusicHeaderOfs);     // is it time to loopback ground level music?
+    cpy(0x32);
+    bne(LoadHeader);                // branch ahead with alternate offset
+    ldy(0x11);
+    bne(GMLoopB);                   // unconditional branch
+
+FindAreaMusicHeader:
+    ldy(0x08);                      // load Y for offset of area music
+    sty(*MusicOffset_Square2);      // residual instruction here
+
+FindEventMusicHeader:
+    iny();                          // increment Y pointer based on previously loaded queue contents
+    lsr(a);                         // bit shift and increment until we find a set bit for music
+    bcc(FindEventMusicHeader);
+
+LoadHeader:
+    lda(MusicHeaderOffsetData[y]);  // load offset for header
+    tay();
+    lda(MusicHeaderData[y]);        // now load the header
+    sta(*NoteLenLookupTblOfs);
+    lda(MusicHeaderData[y+1]);
+    sta(*MusicDataLow);
+    lda(MusicHeaderData[y+2]);
+    sta(*MusicDataHigh);
+    switch (*MusicDataLow|(*MusicDataHigh<<8)) {
+        case 0xfc72: MusicData = TimeRunOutMusData; break;
+        case 0xf9b8: MusicData = Star_CloudMData; break;
+        case 0xfcb0: MusicData = WinLevelMusData; break;
+        case 0xfd11: MusicData = UndergroundMusData; break;
+        case 0xfa1c: MusicData = SilenceData; break;
+        case 0xfba4: MusicData = CastleMusData; break;
+        case 0xfec8: MusicData = VictoryMusData; break;
+        case 0xfc45: MusicData = GameOverMusData; break;
+        case 0xfd52: MusicData = WaterMusData; break;
+        case 0xfe51: MusicData = EndOfCastleMusData; break;
+        case 0xfa01: MusicData = GroundM_P1Data; break;
+        case 0xfa49: MusicData = GroundM_P2AData; break;
+        case 0xfa75: MusicData = GroundM_P2BData; break;
+        case 0xfa9d: MusicData = GroundM_P2CData; break;
+        case 0xfac2: MusicData = GroundM_P3AData; break;
+        case 0xfadb: MusicData = GroundM_P3BData; break;
+        case 0xfaf9: MusicData = GroundMLdInData; break;
+        case 0xfb25: MusicData = GroundM_P4AData; break;
+        case 0xfb4b: MusicData = GroundM_P4BData; break;
+        case 0xfb74: MusicData = GroundM_P4CData; break;
+        case 0xfb72: MusicData = DeathMusData; break;
+    }
+    lda(MusicHeaderData[y+3]);
+    sta(*MusicOffset_Triangle);
+    lda(MusicHeaderData[y+4]);
+    sta(*MusicOffset_Square1);
+    lda(MusicHeaderData[y+5]);
+    sta(*MusicOffset_Noise);
+    sta(*NoiseDataLoopbackOfs);
+    lda(0x01);                      // initialize music note counters
+    sta(*Squ2_NoteLenCounter);
+    sta(*Squ1_NoteLenCounter);
+    sta(*Tri_NoteLenCounter);
+    sta(*Noise_BeatLenCounter);
+    lda(0x00);                      // initialize music data offset for square 2
+    sta(*MusicOffset_Square2);
+    sta(*AltRegContentFlag);        // initialize alternate control reg data used by square 1
+    lda(0x0b);                      // disable triangle channel and reenable it
+    apu_write_snd_chn(a);
+    lda(0x0f);
+    apu_write_snd_chn(a);
+
+HandleSquare2Music:
+    dec(*Squ2_NoteLenCounter);      // decrement square 2 note length
+    bne(MiscSqu2MusicTasks);        // is it time for more data?  if not, branch to end tasks
+    ldy(*MusicOffset_Square2);      // increment square 2 music offset and fetch data
+    inc(*MusicOffset_Square2);
+    lda(MusicData[y]);
+    beq(EndOfMusicData);            // if zero, the data is a null terminator
+    bpl(Squ2NoteHandler);           // if non-negative, data is a note
+    bne(Squ2LengthHandler);         // otherwise it is length data
+
+EndOfMusicData:
+    lda(*EventMusicBuffer);         // check secondary buffer for time running out music
+    cmp(TimeRunningOutMusic);
+    bne(NotTRO);
+    lda(*AreaMusicBuffer_Alt);      // load previously saved contents of primary buffer
+    bne(MusicLoopBack);             // and start playing the song again if there is one
+NotTRO:
+    and(VictoryMusic);              // check for victory music (the only secondary that loops)
+    bne(VictoryMLoopBack);
+    lda(*AreaMusicBuffer);          // check primary buffer for any music except pipe intro
+    and(0x5f);
+    bne(MusicLoopBack);             // if any area music except pipe intro, music loops
+    lda(0x00);                      // clear primary and secondary buffers and initialize
+    sta(*AreaMusicBuffer);          // control regs of square and triangle channels
+    sta(*EventMusicBuffer);
+    apu_write_tri_linear(a);
+    lda(0x90);    
+    apu_write_sq1_vol(a);
+    apu_write_sq2_vol(a);
     return;
-//     uint8_t a, x, y;
-//     bool c;
 
-//     a = *EventMusicQueue;
-//     if (a) {
-//         goto LoadEventMusic;
-//     }
-//     a = *AreaMusicQueue;
-//     if (a) {
-//         goto LoadAreaMusic;
-//     }
-//     a = *EventMusicBuffer;
-//     a |= *AreaMusicBuffer;
-//     if (a) {
-//         goto HandleSquare2Music;
-//     }
-//     return;
+MusicLoopBack:
+    jmp(HandleAreaMusicLoopB);
 
-// LoadEventMusic:
-//     *EventMusicBuffer = a;
-//     if (a != DeathMusic) {
-//         goto NoStopSfx;
-//     }
-//     StopSquare1Sfx();
-//     StopSquare2Sfx();
-// NoStopSfx:
-//     x = *AreaMusicBuffer;
-//     *AreaMusicBuffer_Alt = x;
-//     y = 0x00;
-//     *NoteLengthTblAdder = y;
-//     *AreaMusicBuffer = y;
-//     if (a != TimeRunningOutMusic) {
-//         goto FindEventMusicHeader;
-//     }
-//     x = 0x08;
-//     *NoteLengthTblAdder = x;
-//     goto FindEventMusicHeader;
+VictoryMLoopBack:
+    jmp(LoadEventMusic);
 
-// LoadAreaMusic:
-//     if (a != 0x04) {
-//         goto NoStop1;
-//     }
-//     StopSquare1Sfx();
-// NoStop1:
-//     y = 0x10;
-// GMLoopB:
-//     *GroundMusicHeaderOfs = y;
+Squ2LengthHandler:
+    a = ProcessLengthData(a);       // store length of note
+    sta(*Squ2_NoteLenBuffer);
+    ldy(*MusicOffset_Square2);      // fetch another byte (MUST NOT BE LENGTH BYTE!)
+    inc(*MusicOffset_Square2);
+    lda(MusicData[y]);
 
-// HandleAreaMusicLoopB:
-//     y = 0x00;
-//     *EventMusicBuffer = y;
-//     *AreaMusicBuffer = a;
-//     if (a != 0x01) {
-//         goto FindAreaMusicHeader;
-//     }
-//     ++*GroundMusicHeaderOfs;
-//     y = *GroundMusicHeaderOfs;
-//     if (y != 0x32) {
-//         goto LoadHeader;
-//     }
-//     y = 0x11;
-//     goto GMLoopB;
+Squ2NoteHandler:
+    ldx(*Square2SoundBuffer);       // is there a sound playing on this channel?
+    bne(SkipFqL1);
+    SetFreq_Squ2(&a, &x, &y, &z);   // no, then play the note
+    beq(Rest);                      // check to see if note is rest
+    LoadControlRegs(&a, &x, &y);    // if not, load control regs for square 2
+Rest:
+    sta(*Squ2_EnvelopeDataCtrl);    // save contents of A
+    Dump_Sq2_Regs(x, y);            // dump X and Y into square 2 control regs
+SkipFqL1:
+    lda(*Squ2_NoteLenBuffer);       // save length in square 2 note counter
+    sta(*Squ2_NoteLenCounter);
 
-// FindAreaMusicHeader:
-//     y = 0x08;
-//     *MusicOffset_Square2 = y;
+MiscSqu2MusicTasks:
+    lda(*Square2SoundBuffer);       // is there a sound playing on square 2?
+    bne(HandleSquare1Music);
+    lda(*EventMusicBuffer);         // check for death music or d4 set on secondary buffer
+    and(0x91);                      // note that regs for death music or d4 are loaded by default
+    bne(HandleSquare1Music);
+    ldy(*Squ2_EnvelopeDataCtrl);    // check for contents saved from LoadControlRegs
+    beq(NoDecEnv1);
+    dec(*Squ2_EnvelopeDataCtrl);    // decrement unless already zero
+NoDecEnv1:
+    a = LoadEnvelopeData(y);        // do a load of envelope data to replace default
+    apu_write_sq2_vol(a);           // based on offset set by first load unless playing
+    ldx(0x7f);                      // death music or d4 set on secondary buffer
+    apu_write_sq2_sweep(x);
 
-// FindEventMusicHeader:
-//     ++y;
-//     c = (a & 0x01) ? true : false;
-//     a >>= 1;
-//     if (!c) {
-//         goto FindEventMusicHeader;
-//     }
+HandleSquare1Music:
+    ldy(*MusicOffset_Square1);      // is there a nonzero offset here?
+    beq(HandleTriangleMusic);       // if not, skip ahead to the triangle channel
+    dec(*Squ1_NoteLenCounter);      // decrement square 1 note length
+    bne(MiscSqu1MusicTasks);        // is it time for more data?
 
-// LoadHeader:
-//     a = MusicHeaderOffsetData[y];
-//     y = a;
-//     a = MusicHeaderData[y];
-//     *NoteLenLookupTblOfs = a;
-//     a = MusicHeaderData[y+1];
-//     *MusicDataLow = a;
-//     a = MusicHeaderData[y+2];
-//     *MusicDataHigh = a;
-//     switch (*MusicDataLow|(*MusicDataHigh<<8)) {
-//         case 0xfc72: MusicData = TimeRunOutMusData; break;
-//         case 0xf9b8: MusicData = Star_CloudMData; break;
-//         case 0xfcb0: MusicData = WinLevelMusData; break;
-//         case 0xfd11: MusicData = UndergroundMusData; break;
-//         case 0xfa1c: MusicData = SilenceData; break;
-//         case 0xfba4: MusicData = CastleMusData; break;
-//         case 0xfec8: MusicData = VictoryMusData; break;
-//         case 0xfc45: MusicData = GameOverMusData; break;
-//         case 0xfd52: MusicData = WaterMusData; break;
-//         case 0xfe51: MusicData = EndOfCastleMusData; break;
-//         case 0xfa01: MusicData = GroundM_P1Data; break;
-//         case 0xfa49: MusicData = GroundM_P2AData; break;
-//         case 0xfa75: MusicData = GroundM_P2BData; break;
-//         case 0xfa9d: MusicData = GroundM_P2CData; break;
-//         case 0xfac2: MusicData = GroundM_P3AData; break;
-//         case 0xfadb: MusicData = GroundM_P3BData; break;
-//         case 0xfaf9: MusicData = GroundMLdInData; break;
-//         case 0xfb25: MusicData = GroundM_P4AData; break;
-//         case 0xfb4b: MusicData = GroundM_P4BData; break;
-//         case 0xfb74: MusicData = GroundM_P4CData; break;
-//         case 0xfb72: MusicData = DeathMusData; break;
-//     }
-//     a = MusicHeaderData[y+3];
-//     *MusicOffset_Triangle = a;
-//     a = MusicHeaderData[y+4];
-//     *MusicOffset_Square1 = a;
-//     a = MusicHeaderData[y+5];
-//     *MusicOffset_Noise = a;
-//     *NoiseDataLoopbackOfs = a;
-//     a = 0x01;
-//     *Squ2_NoteLenCounter = a;
-//     *Squ1_NoteLenCounter = a;
-//     *Tri_NoteLenCounter = a;
-//     *Noise_BeatLenCounter = a;
-//     a = 0x00;
-//     *MusicOffset_Square2 = a;
-//     *AltRegContentFlag = a;
-//     a = 0x0b;
-//     apu_write_snd_chn(a);
-//     a = 0x0f;
-//     apu_write_snd_chn(a);
+FetchSqu1MusicData:
+    ldy(*MusicOffset_Square1);      // increment square 1 music offset and fetch data
+    inc(*MusicOffset_Square1);
+    lda(MusicData[y]);
+    bne(Squ1NoteHandler);           // if nonzero, then skip this part
+    lda(0x83);
+    apu_write_sq1_vol(a);           // store some data into control regs for square 1
+    lda(0x94);                      // and fetch another byte of data, used to give
+    apu_write_sq1_sweep(a);         // death music its unique sound
+    sta(*AltRegContentFlag);
+    bne(FetchSqu1MusicData);        // unconditional branch
 
-// HandleSquare2Music:
-//     if (--*Squ2_NoteLenCounter) {
-//         goto MiscSqu2MusicTasks;
-//     }
-//     y = *MusicOffset_Square2;
-//     ++*MusicOffset_Square2;
-//     a = MusicData[y];
-//     if (!a) {
-//         goto EndOfMusicData;
-//     }
-//     if ((int8_t)a >= 0) {
-//         goto Squ2NoteHandler;
-//     }
-//     goto Squ2LengthHandler;
+Squ1NoteHandler:
+    AlternateLengthHandler(&a, &x, c);
+    sta(*Squ1_NoteLenCounter);      // save contents of A in square 1 note counter
+    ldy(*Square1SoundBuffer);       // is there a sound playing on square 1?
+    bne(HandleTriangleMusic);
+    txa();
+    and(0x3e);                      // change saved data to appropriate note format
+    SetFreq_Squ1(&a, &x, &y, &z);   // play the note
+    beq(SkipCtrlL);
+    LoadControlRegs(&a, &x, &y);
+SkipCtrlL:
+    sta(*Squ1_EnvelopeDataCtrl);    // save envelope offset
+    Dump_Squ1_Regs(x, y);
 
-// EndOfMusicData:
-//     a = *EventMusicBuffer;
-//     if (a != TimeRunningOutMusic) {
-//         goto NotTRO;
-//     }
-//     a = *AreaMusicBuffer_Alt;
-//     if (a) {
-//         goto MusicLoopBack;
-//     }
-// NotTRO:
-//     a &= VictoryMusic;
-//     if (a) {
-//         goto VictoryMLoopBack;
-//     }
-//     a = *AreaMusicBuffer;
-//     a &= 0x5f;
-//     if (a) {
-//         goto MusicLoopBack;
-//     }
-//     a = 0x00;
-//     *AreaMusicBuffer = a;
-//     *EventMusicBuffer = a;
-//     apu_write_tri_linear(a);
-//     a = 0x90;
-//     apu_write_sq1_vol(a);
-//     apu_write_sq2_vol(a);
-//     return;
+MiscSqu1MusicTasks:
+    lda(*Square1SoundBuffer);       // is there a sound playing on square 1?
+    bne(HandleTriangleMusic);
+    lda(*EventMusicBuffer);         // check for death music or d4 set on secondary buffer
+    and(0x91);
+    bne(DeathMAltReg);
+    ldy(*Squ1_EnvelopeDataCtrl);    // check saved envelope offset
+    beq(NoDecEnv2);
+    dec(*Squ1_EnvelopeDataCtrl);    // decrement unless already zero
+NoDecEnv2:
+    a = LoadEnvelopeData(y);        // do a load of envelope data
+    apu_write_sq1_vol(a);           // based on offset set by first load
+DeathMAltReg:
+    lda(*AltRegContentFlag);        // check for alternate control reg data
+    bne(DoAltLoad);
+    lda(0x7f);                      // load this value if zero, the alternate value
+DoAltLoad:
+    apu_write_sq1_sweep(a);         // if nonzero, and let's move on
 
-// MusicLoopBack:
-//     goto HandleAreaMusicLoopB;
+HandleTriangleMusic:
+    lda(*MusicOffset_Triangle);
+    dec(*Tri_NoteLenCounter);       // decrement triangle note length
+    bne(HandleNoiseMusic);          // is it time for more data?
+    ldy(*MusicOffset_Triangle);     // increment square 1 music offset and fetch data
+    inc(*MusicOffset_Triangle);
+    lda(MusicData[y]);
+    beq(LoadTriCtrlReg);            // if zero, skip all this and move on to noise 
+    bpl(TriNoteHandler);            // if non-negative, data is note
+    a = ProcessLengthData(a);       // otherwise, it is length data
+    sta(*Tri_NoteLenBuffer);        // save contents of A
+    lda(0x1f);
+    apu_write_tri_linear(a);        // load some default data for triangle control reg
+    ldy(*MusicOffset_Triangle);     // fetch another byte
+    inc(*MusicOffset_Triangle);
+    lda(MusicData[y]);
+    beq(LoadTriCtrlReg);            // check once more for nonzero data
 
-// VictoryMLoopBack:
-//     goto LoadEventMusic;
+TriNoteHandler:
+    SetFreq_Tri(a);
+    ldx(*Tri_NoteLenBuffer);        // save length in triangle note counter
+    stx(*Tri_NoteLenCounter);
+    lda(*EventMusicBuffer);
+    and(0x6e);                      // check for death music or d4 set on secondary buffer
+    bne(NotDOrD4);                  // if playing any other secondary, skip primary buffer check
+    lda(*AreaMusicBuffer);          // check primary buffer for water or castle level music
+    and(0x0a);
+    beq(HandleNoiseMusic);          // if playing any other primary, or death or d4, go on to noise routine
+NotDOrD4:
+    txa();                          // if playing water or castle music or any secondary
+    cmp(0x12);                      // besides death music or d4 set, check length of note
+    bcs(LongN);
+    lda(*EventMusicBuffer);         // check for win castle music again if not playing a long note
+    and(EndOfCastleMusic);
+    beq(MediN);
+    lda(0x0f);                      // load value $0f if playing the win castle music and playing a short
+    bne(LoadTriCtrlReg);            // note, load value $1f if playing water or castle level music or any
+MediN:
+    lda(0x1f);                      // secondary besides death and d4 except win castle or win castle and playing
+    bne(LoadTriCtrlReg);            // a short note, and load value $ff if playing a long note on water, castle
+LongN:
+    lda(0xff);                      // or any secondary (including win castle) except death and d4
 
-// Squ2LengthHandler:
-//     a = ProcessLengthData(a);
-//     *Squ2_NoteLenBuffer = a;
-//     y = *MusicOffset_Square2;
-//     ++*MusicOffset_Square2;
-//     a = MusicData[y];
+LoadTriCtrlReg:           
+    apu_write_tri_linear(a);        // save final contents of A into control reg for triangle
 
-// Squ2NoteHandler:
-//     x = *Square2SoundBuffer;
-//     if (x) {
-//         goto SkipFqL1;
-//     }
-//     a = SetFreq_Squ2(a);
-//     x = 0x04;
-//     y = a;
-//     if (!a) {
-//         goto Rest;
-//     }
-//     LoadControlRegs(&a, &x, &y);
-// Rest:
-//     *Squ2_EnvelopeDataCtrl = a;
-//     Dump_Sq2_Regs(x, y);
-// SkipFqL1:
-//     a = *Squ2_NoteLenBuffer;
-//     *Squ2_NoteLenCounter = a;
+HandleNoiseMusic:
+    lda(*AreaMusicBuffer);          // check if playing underground or castle music
+    and(0xf3);
+    beq(ExitMusicHandler);          // if so, skip the noise routine
+    dec(*Noise_BeatLenCounter);     // decrement noise beat length
+    bne(ExitMusicHandler);          // is it time for more data?
 
-// MiscSqu2MusicTasks:
-//     a = *Square2SoundBuffer;
-//     if (a) {
-//         goto HandleSquare1Music;
-//     }
-//     a = *EventMusicBuffer;
-//     a &= 0x91;
-//     if (a) {
-//         goto HandleSquare1Music;
-//     }
-//     y = *Squ2_EnvelopeDataCtrl;
-//     if (!y) {
-//         goto NoDecEnv1;
-//     }
-//     --*Squ2_EnvelopeDataCtrl;
-// NoDecEnv1:
-//     a = LoadEnvelopeData(y);
-//     apu_write_sq2_vol(a);
-//     x = 0x7f;
-//     apu_write_sq2_sweep(x);
+FetchNoiseBeatData:
+    ldy(*MusicOffset_Noise);        // increment noise beat offset and fetch data
+    inc(*MusicOffset_Noise);
+    lda(MusicData[y]);              // get noise beat data, if nonzero, branch to handle
+    bne(NoiseBeatHandler);
+    lda(*NoiseDataLoopbackOfs);     // if data is zero, reload original noise beat offset
+    sta(*MusicOffset_Noise);        // and loopback next time around
+    bne(FetchNoiseBeatData);       // unconditional branch
 
-// HandleSquare1Music:
-//     y = *MusicOffset_Square1;
-//     if (!y) {
-//         goto HandleTriangleMusic;
-//     }
-//     if (--*Squ1_NoteLenCounter) {
-//         goto MiscSqu1MusicTasks;
-//     }
+NoiseBeatHandler:
+    AlternateLengthHandler(&a, &x, c);
+    sta(*Noise_BeatLenCounter);     // store length in noise beat counter
+    txa();
+    and(0x3e);                      // reload data and erase length bits
+    beq(SilentBeat);                // if no beat data, silence
+    cmp(0x30);                      // check the beat data and play the appropriate
+    beq(LongBeat);                  // noise accordingly
+    cmp(0x20);
+    beq(StrongBeat);
+    and(0x10);  
+    beq(SilentBeat);
+    lda(0x1c);                      // short beat data
+    ldx(0x03);
+    ldy(0x18);
+    bne(PlayBeat);
 
-// FetchSqu1MusicData:
-//     y = *MusicOffset_Square1;
-//     ++*MusicOffset_Square1;
-//     a = MusicData[y];
-//     if (a) {
-//         goto Squ1NoteHandler;
-//     }
-//     a = 0x83;
-//     apu_write_sq1_vol(a);
-//     a = 0x94;
-//     apu_write_sq1_sweep(a);
-//     *AltRegContentFlag = a;
-//     goto FetchSqu1MusicData;
+StrongBeat:
+    lda(0x1c);                      // strong beat data
+    ldx(0x0c);
+    ldy(0x18);
+    bne(PlayBeat);
 
-// Squ1NoteHandler:
-//     AlternateLengthHandler(&a, &x);
-//     *Squ1_NoteLenCounter = a;
-//     y = *Square1SoundBuffer;
-//     if (y) {
-//         goto HandleTriangleMusic;
-//     }
-//     a = x;
-//     a &= 0x3e;
-//     a = SetFreq_Squ1(a);
-//     x = 0x00;
-//     y = a;
-//     if (!a) {
-//         goto SkipCtrlL;
-//     }
-//     LoadControlRegs(&a, &x, &y);
-// SkipCtrlL:
-//     *Squ1_EnvelopeDataCtrl = a;
-//     Dump_Squ1_Regs(x, y);
+LongBeat:
+    lda(0x1c);                      // long beat data
+    ldx(0x03);
+    ldy(0x58);
+    bne(PlayBeat);
 
-// MiscSqu1MusicTasks:
-//     a = *Square1SoundBuffer;
-//     if (a) {
-//         goto HandleTriangleMusic;
-//     }
-//     a = *EventMusicBuffer;
-//     a &= 0x91;
-//     if (a) {
-//         goto DeathMAltReg;
-//     }
-//     y = *Squ1_EnvelopeDataCtrl;
-//     if (!y) {
-//         goto NoDecEnv2;
-//     }
-//     --*Squ1_EnvelopeDataCtrl;
-// NoDecEnv2:
-//     a = LoadEnvelopeData(y);
-//     apu_write_sq1_vol(a);
-// DeathMAltReg:
-//     a = *AltRegContentFlag;
-//     if (a) {
-//         goto DoAltLoad;
-//     }
-//     a = 0x7f;
-// DoAltLoad:
-//     apu_write_sq1_sweep(a);
+SilentBeat:
+    lda(0x10);                      // silence
 
-// HandleTriangleMusic:
-//     a = *MusicOffset_Triangle;
-//     if (--*Tri_NoteLenCounter) {
-//         goto HandleNoiseMusic;
-//     }
-//     y = *MusicOffset_Triangle;
-//     ++*MusicOffset_Triangle;
-//     a = MusicData[y];
-//     if (!a) {
-//         goto LoadTriCtrlReg;
-//     }
-//     if ((int8_t)a >= 0) {
-//         goto TriNoteHandler;
-//     }
-//     a = ProcessLengthData(a);
-//     *Tri_NoteLenBuffer = a;
-//     a = 0x1f;
-//     apu_write_tri_linear(a);
-//     y = *MusicOffset_Triangle;
-//     ++*MusicOffset_Triangle;
-//     a = MusicData[y];
-//     if (!a) {
-//         goto LoadTriCtrlReg;
-//     }
+PlayBeat:
+    apu_write_noise_vol(a);         // load beat data into noise regs
+    apu_write_noise_lo(x);
+    apu_write_noise_hi(y);
 
-// TriNoteHandler:
-//     SetFreq_Tri(a);
-//     x = *Tri_NoteLenBuffer;
-//     *Tri_NoteLenCounter = x;
-//     a = *EventMusicBuffer;
-//     a &= 0x6e;
-//     if (a) {
-//         goto NotDOrD4;
-//     }
-//     a = *AreaMusicBuffer;
-//     a &= 0x0a;
-//     if (!a) {
-//         goto HandleNoiseMusic;
-//     }
-// NotDOrD4:
-//     a = x;
-//     if (a >= 0x12) {
-//         goto LongN;
-//     }
-//     a = *EventMusicBuffer;
-//     a &= EndOfCastleMusic;
-//     if (!a) {
-//         goto MediN;
-//     }
-//     a = 0x0f;
-//     goto LoadTriCtrlReg;
-// MediN:
-//     a = 0x1f;
-//     goto LoadTriCtrlReg;
-// LongN:
-//     a = 0xff;
-
-// LoadTriCtrlReg:
-//     apu_write_tri_linear(a);
-
-// HandleNoiseMusic:
-//     a = *AreaMusicBuffer;
-//     a &= 0xf3;
-//     if (!a) {
-//         goto ExitMusicHandler;
-//     }
-//     if (--*Noise_BeatLenCounter) {
-//         goto ExitMusicHandler;
-//     }
-
-// FetchNoiseBeatData:
-//     y = *MusicOffset_Noise;
-//     ++*MusicOffset_Noise;
-//     a = MusicData[y];
-//     if (a) {
-//         goto NoiseBeatHandler;
-//     }
-//     a = *NoiseDataLoopbackOfs;
-//     *MusicOffset_Noise = a;
-//     if (a) {
-//         goto FetchNoiseBeatData;
-//     }
-
-// NoiseBeatHandler:
-//     AlternateLengthHandler(&a, &x);
-//     *Noise_BeatLenCounter = a;
-//     a = x;
-//     a &= 0x3e;
-//     if (!a) {
-//         goto SilentBeat;
-//     }
-//     if (a == 0x30) {
-//         goto LongBeat;
-//     }
-//     if (a == 0x20) {
-//         goto StrongBeat;
-//     }
-//     a &= 0x10;
-//     if (!a) {
-//         goto SilentBeat;
-//     }
-//     a = 0x1c;
-//     x = 0x03;
-//     y = 0x18;
-//     goto PlayBeat;
-
-// StrongBeat:
-//     a = 0x1c;
-//     x = 0x0c;
-//     y = 0x18;
-//     goto PlayBeat;
-
-// LongBeat:
-//     a = 0x1c;
-//     x = 0x03;
-//     y = 0x58;
-//     goto PlayBeat;
-
-// SilentBeat:
-//     a = 0x10;
-
-// PlayBeat:
-//     apu_write_noise_vol(a);
-//     apu_write_noise_lo(x);
-//     apu_write_noise_hi(y);
-
-// ExitMusicHandler:
-//     return;
-
-//     // pc = 0xf694;
-//     // cpu_execute();
+ExitMusicHandler:
+    return;
 }
 
-void AlternateLengthHandler(uint8_t *a, uint8_t *x) {
-    bool c, c1;
+void AlternateLengthHandler(uint8_t *pa, uint8_t *px, bool c) {
+    uint8_t a = *pa, x = *px;
+    bool n, z;
 
-    // save a copy of original byte into X
-    // save LSB from original byte into carry
-    // reload original byte and rotate three times
-    // turning xx00000x into 00000xxx, with the
-    // bit in carry as the MSB here
-    *x = *a;
-    c = (*a & 0x80) ? true : false;
-    *a = (*a << 1) | (*a & 0x01);
-    c1 = (*a & 0x80) ? true : false;
-    *a = (*a << 1) | (c ? 0x01 : 0x00);
-    *a = (*a << 1) | (c1 ? 0x01 : 0x00);
+    tax();      // save a copy of original byte into X
+    ror(a);     // save LSB from original byte into carry
+    txa();      // reload original byte and rotate three times
+    rol(a);     // turning xx00000x into 00000xxx, with the
+    rol(a);     // bit in carry as the MSB here
+    rol(a);
 
-    *a = ProcessLengthData(*a);
+    a = ProcessLengthData(a);
+
+    *pa = a, *px = x;
 }
 
 uint8_t ProcessLengthData(uint8_t a) {
-    uint16_t a16;
+    uint8_t y;
+    bool n, v, z, c;
 
-    // clear all but the three LSBs
-    a &= 0x07;
-    // add offset loaded from first header byte
-    a16 = a + *NoteLenLookupTblOfs;
-    // add extra if time running out music
-    a = (a16&0xff) + (a16>>8) + *NoteLengthTblAdder;
-    // load length
-    a = MusicLengthLookupTbl[a];
+    and(0x07);                      // clear all but the three LSBs
+    clc();
+    adc(*NoteLenLookupTblOfs);      // add offset loaded from first header byte
+    adc(*NoteLengthTblAdder);       // add extra if time running out music
+    tay()
+    lda(MusicLengthLookupTbl[y]);   // load length
     return a;
 }
 
-void LoadControlRegs(uint8_t *a, uint8_t *x, uint8_t *y) {
-    // check secondary buffer for win castle music
-    if (*EventMusicBuffer & EndOfCastleMusic) {
-        // this value is only used for win castle music
-        *a = 0x04;
-        // unconditional branch
-    // check primary buffer for water music
-    } else if (*AreaMusicBuffer & 0x7d) {
-        // this is the default value for all other music
-        *a = 0x08;
-    } else {
-        // this value is used for water music and all other event music
-        *a = 0x28;
-    }
-    // load contents of other sound regs for square 2
-    *x = 0x82;
-    *y = 0x7f;
+void LoadControlRegs(uint8_t *pa, uint8_t *px, uint8_t *py) {
+    uint8_t a = *pa, x = *px, y = *py;
+    bool n, z;
+
+    lda(*EventMusicBuffer); // check secondary buffer for win castle music
+    and(EndOfCastleMusic);
+    beq(NotECstlM);
+    lda(0x04);              // this value is only used for win castle music
+    bne(AllMus);            // unconditional branch
+NotECstlM:
+    lda(*AreaMusicBuffer);
+    and(0x7d);              // check primary buffer for water music
+    beq(WaterMus);
+    lda(0x08);              // this is the default value for all other music
+    bne(AllMus);
+WaterMus:
+    lda(0x28);              // this value is used for water music and all other event music
+AllMus:
+    ldx(0x82);              // load contents of other sound regs for square 2
+    ldy(0x7f);
+    // rts
+
+    *pa = a, *px = x, *py = y;
 }
 
 uint8_t LoadEnvelopeData(uint8_t y) {
-    // check secondary buffer for win castle music
-    if (*EventMusicBuffer & EndOfCastleMusic) {
-        // load data from offset for win castle music
-        return EndOfCastleMusicEnvData[y];
-    }
+    uint8_t a;
+    bool n, z;
+    
+    lda(*EventMusicBuffer);             // check secondary buffer for win castle music
+    and(EndOfCastleMusic);
+    beq(LoadUsualEnvData);
+    lda(EndOfCastleMusicEnvData[y]);    // load data from offset for win castle music
+    return a;
 
-    // check primary buffer for water music
-    if (*AreaMusicBuffer & 0x7d) {
-        // load default data from offset for all other music
-        return AreaMusicEnvData[y];
-    }
+LoadUsualEnvData:
+    lda(*AreaMusicBuffer);              // check primary buffer for water music
+    and(0x7d);
+    beq(LoadWaterEventMusEnvData);
+    lda(AreaMusicEnvData[y]);           // load default data from offset for all other music
+    return a;
 
-    // load data from offset for water music and all other event music
-    return WaterEventMusEnvData[y];
+LoadWaterEventMusEnvData:
+    lda(WaterEventMusEnvData[y]);       // load data from offset for water music and all other event music
+    return a;
 }
 
 const uint8_t MusicHeaderData[0xab] = {
