@@ -28,6 +28,8 @@ void SpriteShuffler(void);
 void OperModeExecutionTree(void);
 void MoveAllSpritesOffscreen(void);
 void MoveSpritesOffscreen(void);
+void TitleScreenMode(void);
+void VictoryMode(void);
 const uint8_t WaterPaletteData[];
 const uint8_t GroundPaletteData[];
 const uint8_t UndergroundPaletteData[];
@@ -53,6 +55,8 @@ void WritePPUReg1(uint8_t a);
 void UpdateTopScore(void);
 void TopScoreCheck(uint8_t x);
 uint8_t InitializeMemory(uint8_t y);
+void GameOverMode(void);
+void GameMode(void);
 void SoundEngine(void);
 void Dump_Squ1_Regs(uint8_t x, uint8_t y);
 bool PlaySqu1Sfx(uint8_t a, uint8_t x, uint8_t y);
@@ -1027,8 +1031,14 @@ SetMiscOffset:
 
 // $8212
 void OperModeExecutionTree(void) {
-    pc = 0x8212;
-    cpu_execute();
+    const void (*f[])(void) = {
+        TitleScreenMode,
+        GameMode,
+        VictoryMode,
+        GameOverMode
+    };
+
+    f[*OperMode]();
 }
 
 // $8220
@@ -1068,6 +1078,16 @@ SprInitLoop:
     iny();
     bne(SprInitLoop);
     // rts
+}
+
+void TitleScreenMode(void) {
+    pc = 0x8231;
+    cpu_execute();
+}
+
+void VictoryMode(void) {
+    pc = 0x838b;
+    cpu_execute();
 }
 
 // VRAM BUFFER DATA FOR LOCATIONS IN PRG-ROM
@@ -1455,6 +1475,16 @@ SkipByte:
     dex();                          // go onto the next page
     bpl(InitPageLoop);              // do this until all pages of memory have been erased
     return a;
+}
+
+void GameOverMode(void) {
+    pc = 0x9218;
+    cpu_execute();
+}
+
+void GameMode(void) {
+    pc = 0xaedc;
+    cpu_execute();
 }
 
 void SoundEngine(void) {
