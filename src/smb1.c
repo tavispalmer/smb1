@@ -1088,7 +1088,6 @@ SprInitLoop:
 // -------------------------------------------------------------------------------------
 
 void TitleScreenMode(void) {
-    fprintf(stderr, "OperMode_Task = %d\n", *OperMode_Task);
     const void (*f[])(void) = {
         InitializeGame,
         ScreenRoutines,
