@@ -16,17 +16,7 @@ add_custom_command(
 
 add_subdirectory(notsofatso)
 
-if(WIN32)
-    add_subdirectory(glfw)
-    add_subdirectory(openal-soft)
-endif()
-
-set(GLAD_SRC
-    src/glad/gl.c
-)
-
 add_executable(smb1
-    ${GLAD_SRC}
     src/apu.cpp
     src/cpu.c
     src/main.c
@@ -42,7 +32,7 @@ if(WIN32)
 else()
     # unix
     target_include_directories(smb1 PRIVATE include notsofatso)
-    target_link_libraries(smb1 PRIVATE m SDL2 notsofatso)
+    target_link_libraries(smb1 PRIVATE SDL2 notsofatso)
 endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
