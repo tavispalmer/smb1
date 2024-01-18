@@ -38,11 +38,11 @@ add_executable(smb1
 if(WIN32)
     # windows
     target_include_directories(smb1 PRIVATE include glfw/include openal-soft/include notsofatso)
-    target_link_libraries(smb1 PRIVATE glfw OpenAL notsofatso)
+    target_link_libraries(smb1 PRIVATE notsofatso)
 else()
     # unix
     target_include_directories(smb1 PRIVATE include notsofatso)
-    target_link_libraries(smb1 PRIVATE m glfw openal notsofatso)
+    target_link_libraries(smb1 PRIVATE m SDL2 notsofatso)
 endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

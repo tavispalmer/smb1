@@ -12,11 +12,7 @@
 # include <time.h>
 #endif
 
-#include <glad/gl.h>
-#include <GLFW/glfw3.h>
-
-#include <AL/al.h>
-#include <AL/alc.h>
+#include <SDL2/SDL.h>
 
 #include "rom.h"
 
@@ -30,410 +26,299 @@ smb1_input_t saved_inputs;
 
 int16_t empty_buffer[APU_SAMPLES_SIZE/sizeof(int16_t)];
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS) {
-        switch (key) {
-            case GLFW_KEY_X:
-                saved_inputs.a = true;
-                break;
-            case GLFW_KEY_Z:
-                saved_inputs.b = true;
-                break;
-            case GLFW_KEY_RIGHT_SHIFT:
-                saved_inputs.select = true;
-                break;
-            case GLFW_KEY_ENTER:
-                saved_inputs.start = true;
-                break;
-            case GLFW_KEY_UP:
-                saved_inputs.up = true;
-                break;
-            case GLFW_KEY_DOWN:
-                saved_inputs.down = true;
-                break;
-            case GLFW_KEY_LEFT:
-                saved_inputs.left = true;
-                break;
-            case GLFW_KEY_RIGHT:
-                saved_inputs.right = true;
-                break;
-            default:
-                break;
-        }
-    } else if (action == GLFW_RELEASE) {
-        switch (key) {
-            case GLFW_KEY_X:
-                saved_inputs.a = false;
-                break;
-            case GLFW_KEY_Z:
-                saved_inputs.b = false;
-                break;
-            case GLFW_KEY_RIGHT_SHIFT:
-                saved_inputs.select = false;
-                break;
-            case GLFW_KEY_ENTER:
-                saved_inputs.start = false;
-                break;
-            case GLFW_KEY_UP:
-                saved_inputs.up = false;
-                break;
-            case GLFW_KEY_DOWN:
-                saved_inputs.down = false;
-                break;
-            case GLFW_KEY_LEFT:
-                saved_inputs.left = false;
-                break;
-            case GLFW_KEY_RIGHT:
-                saved_inputs.right = false;
-                break;
-            default:
-                break;
-        }
-    }
-}
-
 void input_callback(smb1_input_t *input) {
     *input = saved_inputs;
 }
 
-/*
- * START OPENAL CODE
- * 
- * OpenAL code taken from RetroArch:
- * https://github.com/libretro/RetroArch/blob/master/audio/drivers/openal.c
-*/
+typedef struct {
+    uint8_t*array;
+    size_t head;
+    size_t tail;
+    size_t capacity;
+    size_t size;
+} queue_t;
 
-#define OPENAL_BUFSIZE 1024
+void queue_init(queue_t *queue) {
+    memset(queue, 0, sizeof(queue_t));
+}
 
-typedef struct al {
-    ALuint source;
-    ALuint *buffers;
-    ALuint *res_buf;
-    ALCdevice *handle;
-    ALCcontext *ctx;
-    size_t res_ptr;
-    ALsizei num_buffers;
-    size_t tmpbuf_ptr;
-    int rate;
-    ALenum format;
-    uint8_t tmpbuf[OPENAL_BUFSIZE];
-    bool nonblock;
-    bool is_paused;
-} al_t;
+void queue_destroy(queue_t *queue) {
+    if (queue->array) {
+        free(queue->array);
+    }
+}
 
-void al_free(al_t *al) {
-    if (!al)
+void queue_enqueue(queue_t *queue, const void *buf, size_t count) {
+    if (count <= 0) {
         return;
-    
-    alSourceStop(al->source);
-    alDeleteSources(1, &al->source);
+    }
 
-    if (al->buffers)
-        alDeleteBuffers(al->num_buffers, al->buffers);
-    
-    free(al->buffers);
-    free(al->res_buf);
-    alcMakeContextCurrent(NULL);
+    if (queue->size + count > queue->capacity) {
+        size_t newcapacity = queue->capacity ? queue->capacity : 4;
+        while (queue->size + count > newcapacity) {
+            newcapacity *= 2;
+        }
 
-    if (al->ctx)
-        alcDestroyContext(al->ctx);
-    if (al->handle)
-        alcCloseDevice(al->handle);
-    free(al);
+        uint8_t *newarray = malloc(newcapacity);
+        if (queue->size > 0) {
+            if (queue->head < queue->tail) {
+                memcpy(newarray, queue->array + queue->head, queue->size);
+            }
+            else {
+                memcpy(newarray, queue->array + queue->head, queue->capacity - queue->head);
+                memcpy(newarray + queue->capacity - queue->head, queue->array, queue->tail);
+            }
+        }
+
+        if (queue->array) {
+            free(queue->array);
+        }
+        queue->capacity = newcapacity;
+        queue->array = newarray;
+        queue->head = 0;
+        queue->tail = (queue->size == newcapacity) ? 0 : queue->size;
+    }
+
+    size_t first_part = MIN(queue->capacity - queue->tail, count);
+    memcpy(queue->array + queue->tail, buf, first_part);
+    size_t second_part = count - first_part;
+    if (second_part > 0) {
+        memcpy(queue->array, buf + first_part, second_part);
+    }
+
+    queue->tail = (queue->tail + count) % queue->capacity;
+    queue->size += count;
 }
 
-al_t *al_init(unsigned rate, unsigned latency) {
-    al_t *al;
+void queue_dequeue(queue_t *queue, void *buf, size_t count) {
+    count = MIN(count, queue->size);
+    if (count <= 0) {
+        return;
+    }
 
-    al = (al_t*)calloc(1, sizeof(al_t));
-    if (!al)
-        return NULL;
-    
-    al->handle = alcOpenDevice(NULL);
-    if (!al->handle)
-        goto error;
-    
-    al->ctx = alcCreateContext(al->handle, NULL);
-    if (!al->ctx)
-        goto error;
-    
-    alcMakeContextCurrent(al->ctx);
+    size_t first_part = MIN(queue->capacity - queue->head, count);
+    memcpy(buf, queue->array + queue->head, first_part);
+    size_t second_part = count - first_part;
+    if (second_part > 0) {
+        memcpy(buf + first_part, queue->array, second_part);
+    }
 
-    al->rate = rate;
-
-    /* We already use one buffer for tmpbuf. */
-    al->num_buffers = (latency * rate * 2 * sizeof(int16_t)) / (1000 * OPENAL_BUFSIZE) - 1;
-    if (al->num_buffers < 2)
-        al->num_buffers = 2;
-    
-    al->buffers = (ALuint*)calloc(al->num_buffers, sizeof(ALuint));
-    al->res_buf = (ALuint*)calloc(al->num_buffers, sizeof(ALuint));
-    if (!al->buffers || !al->res_buf)
-        goto error;
-    
-    alGenSources(1, &al->source);
-    alGenBuffers(al->num_buffers, al->buffers);
-
-    memcpy(al->res_buf, al->buffers, al->num_buffers * sizeof(ALuint));
-    al->res_ptr = al->num_buffers;
-
-    return al;
-
-error:
-    al_free(al);
-    return NULL;
+    queue->head = (queue->head + count) % queue->capacity;
+    queue->size -= count;
 }
 
-bool al_unqueue_buffers(al_t *al) {
-    ALint val;
-
-    alGetSourcei(al->source, AL_BUFFERS_PROCESSED, &val);
-
-    if (val <= 0)
-        return false;
+void sdl_audio_callback(void *userdata, Uint8* stream, int len) {
+    queue_t *audio_queue = (queue_t *)userdata;
     
-    alSourceUnqueueBuffers(al->source, val, &al->res_buf[al->res_ptr]);
-    al->res_ptr += val;
-    return true;
+    size_t count = MIN(len, audio_queue->size);
+    queue_dequeue(audio_queue, stream, count);
+    memset(stream + count, 0, len - count);
 }
 
-bool al_get_buffer(al_t *al, ALuint *buffer) {
-    if (!al->res_ptr) {
-        for (;;) {
-            if (al_unqueue_buffers(al))
+void poll_events(bool *should_quit) {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_QUIT:
+                *should_quit = true;
                 break;
-            
-            if (al->nonblock)
-                return false;
-            
-            /* Must sleep as there is no proper blocking method. */
-#ifdef _WIN32
-            Sleep(1);
-#else
-            struct timespec time = {
-                .tv_sec = 0L,
-                .tv_nsec = 1000000L // 1ms
-            };
-            while (nanosleep(&time, &time) == -1 && errno == EINTR) {}
-#endif
+            case SDL_KEYDOWN:
+                switch (event.key.keysym.scancode) {
+                    case SDL_SCANCODE_X:
+                        saved_inputs.a = true;
+                        break;
+                    case SDL_SCANCODE_Z:
+                        saved_inputs.b = true;
+                        break;
+                    case SDL_SCANCODE_RSHIFT:
+                        saved_inputs.select = true;
+                        break;
+                    case SDL_SCANCODE_RETURN:
+                        saved_inputs.start = true;
+                        break;
+                    case SDL_SCANCODE_UP:
+                        saved_inputs.up = true;
+                        break;
+                    case SDL_SCANCODE_DOWN:
+                        saved_inputs.down = true;
+                        break;
+                    case SDL_SCANCODE_LEFT:
+                        saved_inputs.left = true;
+                        break;
+                    case SDL_SCANCODE_RIGHT:
+                        saved_inputs.right = true;
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            case SDL_KEYUP:
+                switch (event.key.keysym.scancode) {
+                    case SDL_SCANCODE_X:
+                        saved_inputs.a = false;
+                        break;
+                    case SDL_SCANCODE_Z:
+                        saved_inputs.b = false;
+                        break;
+                    case SDL_SCANCODE_RSHIFT:
+                        saved_inputs.select = false;
+                        break;
+                    case SDL_SCANCODE_RETURN:
+                        saved_inputs.start = false;
+                        break;
+                    case SDL_SCANCODE_UP:
+                        saved_inputs.up = false;
+                        break;
+                    case SDL_SCANCODE_DOWN:
+                        saved_inputs.down = false;
+                        break;
+                    case SDL_SCANCODE_LEFT:
+                        saved_inputs.left = false;
+                        break;
+                    case SDL_SCANCODE_RIGHT:
+                        saved_inputs.right = false;
+                        break;
+                    default:
+                        break;
+                }
+                break;
         }
     }
-
-    *buffer = al->res_buf[--al->res_ptr];
-    return true;
 }
 
-size_t al_fill_internal_buf(al_t *al, const void *buf, size_t size) {
-    size_t read_size = MIN(OPENAL_BUFSIZE - al->tmpbuf_ptr, size);
-    memcpy(al->tmpbuf + al->tmpbuf_ptr, buf, read_size);
-    al->tmpbuf_ptr += read_size;
-    return read_size;
+int64_t gettime(void) {
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    return tp.tv_sec * 1000000000L + tp.tv_nsec;
 }
 
-ssize_t al_write(al_t *al, const uint8_t *buf, size_t size) {
-    size_t written = 0;
-
-    while (size) {
-        ALint val;
-        ALuint buffer;
-        size_t rc = al_fill_internal_buf(al, buf, size);
-
-        written += rc;
-        buf += rc;
-        size -= rc;
-
-        if (al->tmpbuf_ptr != OPENAL_BUFSIZE)
-            break;
-        
-        if (!al_get_buffer(al, &buffer))
-            break;
-        
-        alBufferData(buffer, AL_FORMAT_STEREO16, al->tmpbuf, OPENAL_BUFSIZE, al->rate);
-        al->tmpbuf_ptr = 0;
-        alSourceQueueBuffers(al->source, 1, &buffer);
-        if (alGetError() != AL_NO_ERROR)
-            return -1;
-        
-        alGetSourcei(al->source, AL_SOURCE_STATE, &val);
-        if (val != AL_PLAYING)
-            alSourcePlay(al->source);
-        
-        if (alGetError() != AL_NO_ERROR)
-            return -1;
-    }
-
-    return written;
+void sleep(int64_t ns) {
+    struct timespec tp = {
+        .tv_sec = ns / 1000000000LL,
+        .tv_nsec = ns % 1000000000LL
+    };
+    while (nanosleep(&tp, &tp) == -1 && errno == EINTR) {}
 }
-
-void al_set_nonblock_state(al_t *al, bool state) {
-    if (al)
-        al->nonblock = state;
-}
-
-/*
- * END OPENAL CODE
-*/
 
 int main(int argc, char **argv) {
 
-    GLFWwindow *window;
-
-    if (!glfwInit())
-        return -1;
-    
-    float xscale, yscale;
-    glfwGetWindowContentScale(window, &xscale, &yscale);
-
-    window = glfwCreateWindow((int) (768*xscale), (int) (720*yscale), "smb1", NULL, NULL);
-    if (!window) {
-        glfwTerminate();
-        return -1;
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
     }
 
-    glfwMakeContextCurrent(window);
+    SDL_Window *window = SDL_CreateWindow("smb1", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 768, 720, 0);
+    if (!window) {
+        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
-    glfwSetKeyCallback(window, key_callback);
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
+    if (!renderer) {
+        fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
-    gladLoadGL((GLADloadfunc) glfwGetProcAddress);
+    if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xff)) {
+        fprintf(stderr, "SDL_SetRenderDrawColor: %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
-    glfwSwapInterval(1);
-
-    // init screen
-
-    // shader
-    const char *vertex_code =
-            "#version 330 core\n"
-            "layout (location = 0) in vec2 a_pos;\n"
-            "layout (location = 1) in vec2 a_tex_coord;\n"
-            "\n"
-            "out vec2 tex_coord;\n"
-            "\n"
-            "void main() {\n"
-            "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
-            "    tex_coord = a_tex_coord;\n"
-            "}\n";
-    const char *fragment_code =
-            "#version 330 core\n"
-            "out vec4 frag_color;\n"
-            "\n"
-            "in vec2 tex_coord;\n"
-            "\n"
-            "uniform sampler2D tex;\n"
-            "\n"
-            "void main() {\n"
-            "    frag_color = texture(tex, tex_coord);\n"
-            "}\n";
-    
-    GLuint shader, vertex, fragment;
-    
-    vertex = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex, 1, &vertex_code, NULL);
-    glCompileShader(vertex);
-
-    fragment = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment, 1, &fragment_code, NULL);
-    glCompileShader(fragment);
-
-    shader = glCreateProgram();
-    glAttachShader(shader, vertex);
-    glAttachShader(shader, fragment);
-    glLinkProgram(shader);
-
-    glDeleteShader(vertex);
-    glDeleteShader(fragment);
-
-    // vertices
-    float vertices[] = {
-        -1.0f, 1.0f, 0.0f, 0.0f,
-        1.0f, 1.0f, 1.0f, 0.0f,
-        1.0f, -1.0f, 1.0f, 1.0f,
-        -1.0f, -1.0f, 0.0f, 1.0f
-    };
-    unsigned int indices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-    GLuint vbo, vao, ebo;
-    glGenVertexArrays(1, &vao);
-    glGenBuffers(1, &vbo);
-    glGenBuffers(1, &ebo);
-
-    glBindVertexArray(vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    // texture
-    GLuint texture;
-
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 240, 0, GL_RGB, GL_UNSIGNED_BYTE, ppu_screen());
-    
-    glUseProgram(shader);
-    glUniform1i(glGetUniformLocation(shader, "tex"), 0);
+    SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, 256, 240);
+    if (!texture) {
+        fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
     // audio
-    al_t *al = al_init(APU_SAMPLE_RATE, 64);
-    al_set_nonblock_state(al, true);
+    queue_t audio_queue;
+    queue_init(&audio_queue);
+
+    SDL_AudioSpec out;
+    SDL_AudioSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.freq = APU_SAMPLE_RATE;
+    spec.format = AUDIO_S16SYS;
+    spec.channels = 2;
+    spec.samples = 1024;
+    spec.callback = sdl_audio_callback;
+    spec.userdata = &audio_queue;
+
+    SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(NULL, false, &spec, &out, 0);
+    if (!audio_device) {
+        fprintf(stderr, "SDL_OpenAudioDevice: %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
+
+    SDL_PauseAudioDevice(audio_device, false);
 
     smb1_set_input_callback(input_callback);
     smb1_init();
 
-    while (!glfwWindowShouldClose(window)) {
+    bool should_quit = false;
+    while (!should_quit) {
 
-        // struct timespec start;
-        // clock_gettime(CLOCK_MONOTONIC, &start);
-        // uint64_t start_nanos = (uint64_t)start.tv_sec * 1000000000LL + (uint64_t)start.tv_nsec;
+        int64_t start = gettime();
 
         smb1_run();
 
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
+        SDL_LockAudioDevice(audio_device);
+        queue_enqueue(&audio_queue, apu_samples, APU_SAMPLES_SIZE);
+        SDL_UnlockAudioDevice(audio_device);
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        uint8_t *pixels;
+        int pitch;
+        if (SDL_LockTexture(texture, NULL, (void**)&pixels, &pitch)) {
+            fprintf(stderr, "SDL_LockTexture: %s\n", SDL_GetError());
+            SDL_Quit();
+            return EXIT_FAILURE;
+        }
+        const uint8_t *screen = ppu_screen();
+        for (size_t row = 0; row < 240; ++row) {
+            for (size_t column = 0; column < 256; ++column) {
+                pixels[row*pitch+column*4+2] = screen[(row*256+column)*3];
+                pixels[row*pitch+column*4+1] = screen[(row*256+column)*3+1];
+                pixels[row*pitch+column*4] = screen[(row*256+column)*3+2];
+                pixels[row*pitch+column*4+3] = 0xff;
+            }
+        }
+        SDL_UnlockTexture(texture);
 
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 240, GL_RGB, GL_UNSIGNED_BYTE, ppu_screen());
+        if (SDL_RenderClear(renderer)) {
+            fprintf(stderr, "SDL_RenderClear: %s\n", SDL_GetError());
+            SDL_Quit();
+            return EXIT_FAILURE;
+        }
+        if (SDL_RenderCopy(renderer, texture, NULL, NULL)) {
+            fprintf(stderr, "SDL_RenderCopy: %s\n", SDL_GetError());
+            SDL_Quit();
+            return EXIT_FAILURE;
+        }
 
-        glUseProgram(shader);
-        glBindVertexArray(vao);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        
-        al_write(al, (const uint8_t *)apu_samples, APU_SAMPLES_SIZE);
+        SDL_RenderPresent(renderer);
 
-        glfwSwapBuffers(window);
-        glfwPollEvents();
+        int64_t stop = gettime();
 
-        // struct timespec stop;
-        // clock_gettime(CLOCK_MONOTONIC, &stop);
-        // uint64_t stop_nanos = (uint64_t)stop.tv_sec * 1000000000LL + (uint64_t)stop.tv_nsec;
+        int64_t time_remaining = (1048273600ULL / 63ULL) + start - stop;
+        if (time_remaining > 0) {
+            sleep(time_remaining);
+        }
 
-        // uint64_t time_remaining = (1000000000ULL / 60ULL) + start_nanos - stop_nanos;
-        // //fprintf(stderr, "%llu\n", time_remaining);
-        // if (time_remaining > 0) {
-        //     struct timespec remaining = {
-        //         .tv_sec = time_remaining / 1000000000ULL,
-        //         .tv_nsec = time_remaining % 1000000000ULL
-        //     };
-        //     while (nanosleep(&remaining, &remaining) == -1 && errno == EINTR) {}
-        // }
+        poll_events(&should_quit);
     }
 
-    al_free(al);
+    SDL_CloseAudioDevice(audio_device);
+    queue_destroy(&audio_queue);
 
-    glfwTerminate();
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+
+    SDL_Quit();
 }
