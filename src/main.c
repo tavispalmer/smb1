@@ -24,8 +24,6 @@
 
 smb1_input_t saved_inputs;
 
-int16_t empty_buffer[APU_SAMPLES_SIZE/sizeof(int16_t)];
-
 void input_callback(smb1_input_t *input) {
     *input = saved_inputs;
 }
