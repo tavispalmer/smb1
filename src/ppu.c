@@ -168,12 +168,11 @@ void ppu_draw(uint16_t end) {
                     x_begin = 0;
                     x_end = ppuscroll.x;
                 }
-                for (uint16_t x = x_begin, sx = 0x100 - x_end; x < x_end; ++x, ++sx) {
-                    uint8_t tile;
-                    uint8_t gfx_low;
-                    uint8_t gfx_high;
-                    uint8_t pal_index;
 
+                uint8_t gfx_low;
+                uint8_t gfx_high;
+                uint8_t pal_index;
+                for (uint16_t x = x_begin, sx = 0x100 - x_end; x < x_end; ++x, ++sx) {
                     if (!(x & 0x7) || !sx) {
                         if (!(x & 0xf) || !sx) {
                             pal_index = ppudata[(nt<<10)|0x3c0|((y>>2)&0x38)|(x>>5)];
@@ -181,7 +180,7 @@ void ppu_draw(uint16_t end) {
                             pal_index &= 0x3;
                         }
 
-                        tile = ppudata[(nt<<10)|((y<<2)&0x3e0)|(x>>3)];
+                        uint8_t tile = ppudata[(nt<<10)|((y<<2)&0x3e0)|(x>>3)];
                         gfx_low = chr[0x1000|(tile<<4)|(y&0x7)];
                         gfx_high = chr[0x1000|(tile<<4)|0x8|(y&0x7)];
                     }

@@ -12,7 +12,11 @@
 # include <time.h>
 #endif
 
-#include <SDL2/SDL.h>
+#ifdef _WIN32
+# include <SDL.h>
+#else
+# include <SDL2/SDL.h>
+#endif
 
 #include "rom.h"
 
@@ -81,7 +85,7 @@ void queue_enqueue(queue_t *queue, const void *buf, size_t count) {
     memcpy(queue->array + queue->tail, buf, first_part);
     size_t second_part = count - first_part;
     if (second_part > 0) {
-        memcpy(queue->array, buf + first_part, second_part);
+        memcpy(queue->array, (const uint8_t *)buf + first_part, second_part);
     }
 
     queue->tail = (queue->tail + count) % queue->capacity;
@@ -98,7 +102,7 @@ void queue_dequeue(queue_t *queue, void *buf, size_t count) {
     memcpy(buf, queue->array + queue->head, first_part);
     size_t second_part = count - first_part;
     if (second_part > 0) {
-        memcpy(buf + first_part, queue->array, second_part);
+        memcpy((uint8_t *)buf + first_part, queue->array, second_part);
     }
 
     queue->head = (queue->head + count) % queue->capacity;
@@ -185,17 +189,36 @@ void poll_events(bool *should_quit) {
 }
 
 int64_t gettime(void) {
+#ifdef _WIN32
+    static int64_t frequency;
+    static bool init = false;
+    if (!init) {
+        LARGE_INTEGER lpFrequency;
+        QueryPerformanceFrequency(&lpFrequency);
+        frequency = lpFrequency.QuadPart;
+    }
+
+    LARGE_INTEGER lpPerformanceCount;
+    QueryPerformanceCounter(&lpPerformanceCount);
+    int64_t performance_count = lpPerformanceCount.QuadPart;
+    return performance_count * 1000000000LL / frequency;
+#else
     struct timespec tp;
     clock_gettime(CLOCK_MONOTONIC, &tp);
-    return tp.tv_sec * 1000000000L + tp.tv_nsec;
+    return tp.tv_sec * 1000000000LL + tp.tv_nsec;
+#endif
 }
 
 void sleep(int64_t ns) {
+#ifdef _WIN32
+    Sleep((DWORD)(ns / 1000000LL));
+#else
     struct timespec tp = {
         .tv_sec = ns / 1000000000LL,
         .tv_nsec = ns % 1000000000LL
     };
     while (nanosleep(&tp, &tp) == -1 && errno == EINTR) {}
+#endif
 }
 
 int main(int argc, char **argv) {
@@ -319,4 +342,6 @@ int main(int argc, char **argv) {
     SDL_DestroyWindow(window);
 
     SDL_Quit();
+
+    return 0;
 }

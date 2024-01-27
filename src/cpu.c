@@ -887,7 +887,8 @@ void cpu_rti(void) {
 }
 
 void cpu_rts(void) {
-    pc = cpu_read(0x100 | ++sp) | (cpu_read(0x100 | ++sp) << 8);
+    pc = cpu_read(0x100 | ++sp);
+    pc |= (cpu_read(0x100 | ++sp) << 8);
     ++pc;
 }
 

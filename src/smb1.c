@@ -50,7 +50,7 @@ const uint8_t WorldSelectMessage2[];
 void InitializeNameTables(void);
 void WriteNTAddr(uint8_t a);
 void ReadJoypads(void);
-void ReadPortBits(uint8_t x);
+void ReadPortBits(uint8_t a, uint8_t x);
 void UpdateScreen(const uint8_t *address);
 void InitScroll(uint8_t a);
 void WritePPUReg1(uint8_t a);
@@ -74,7 +74,7 @@ void Square2SfxHandler(void);
 void StopSquare2Sfx(void);
 void NoiseSfxHandler(void);
 void MusicHandler(void);
-void AlternateLengthHandler(uint8_t *a, uint8_t *x, bool c);
+void AlternateLengthHandler(uint8_t *a, uint8_t *x);
 uint8_t ProcessLengthData(uint8_t a);
 void LoadControlRegs(uint8_t *a, uint8_t *x, uint8_t *y);
 uint8_t LoadEnvelopeData(uint8_t y);
@@ -898,7 +898,7 @@ RotPRandomBit:
     bne(RotPRandomBit);
     lda(*Sprite0HitDetectFlag);         // check for flag here
     beq(SkipSprite0);
-Sprite0Clr:
+// Sprite0Clr:
     lda(ppu_read_ppustatus());          // wait for sprite 0 flag to clear, which will
     // and #%01000000                   // not happen until vblank has ended
     // bne Sprite0Clr
@@ -972,12 +972,12 @@ ChkStart:
     ora(0x80);
     bne(SetPause);          // unconditional branch
 ClrPauseTimer:
-    lda(*GamePauseStatus)   // clear timer flag if timer is at zero and start button
+    lda(*GamePauseStatus);  // clear timer flag if timer is at zero and start button
     and(0x7f);              // is not pressed
 SetPause:
     sta(*GamePauseStatus);
 ExitPause:
-    // rts
+    return;
 }
 
 // -------------------------------------------------------------------------------------
@@ -988,7 +988,6 @@ void SpriteShuffler(void) {
     bool n, v, z, c;
     uint8_t m0;
 
-SpriteShuffler:
     ldy(*AreaType);                 // load level type, likely residual code
     lda(0x28);                      // load preset value which will put it at
     sta(m0);                        // sprite #10
@@ -1315,17 +1314,17 @@ void ReadJoypads(void) {
     lsr(a);
     tax();                      // start with joypad 1's port
     cpu_write_joy1(a);
-    ReadPortBits(x);
+    ReadPortBits(a, x);
     inx();                      // increment for joypad 2's port
-    ReadPortBits(x);
+    ReadPortBits(a, x);
 }
 
-void ReadPortBits(uint8_t x) {
+void ReadPortBits(uint8_t a, uint8_t x) {
     static const uint8_t (*cpu_read_joy[2])(void) = {
         cpu_read_joy1, cpu_read_joy2
     };
 
-    uint8_t a, y;
+    uint8_t y;
     bool n, z, c;
     uint8_t m0;
 
@@ -1361,7 +1360,7 @@ Save8Bits:
 
 void UpdateScreen(const uint8_t *m0) {
     uint8_t a, x, y;
-    bool n, v, z, c;
+    bool n, z, c;
 
     uint8_t s[1];
     uint8_t *sp = s + sizeof(s) - 1;
@@ -1470,7 +1469,7 @@ CopyScore:
     cpy(0x06);                  // do this until we have stored them all
     bcc(CopyScore);
 NoTopSc:
-    // rts
+    return;
 }
 
 void InitializeGame(void) {
@@ -1903,8 +1902,8 @@ void StopSquare1Sfx(void) {
     apu_write_snd_chn(x);
     ldx(0x0f);
     apu_write_snd_chn(x);
-ExSfx1:
-    // rts
+// ExSfx1:
+    return;
 }
 
 const uint8_t ExtraLifeFreqData[0x6] = {
@@ -2125,8 +2124,8 @@ void StopSquare2Sfx(void) {
     apu_write_snd_chn(x); 
     ldx(0x0f);
     apu_write_snd_chn(x);
-ExSfx2:
-    // rts
+// ExSfx2:
+    return;
 }
 
 const uint8_t BrickShatterFreqData[0x10] = {
@@ -2413,7 +2412,7 @@ FetchSqu1MusicData:
     bne(FetchSqu1MusicData);        // unconditional branch
 
 Squ1NoteHandler:
-    AlternateLengthHandler(&a, &x, c);
+    AlternateLengthHandler(&a, &x);
     sta(*Squ1_NoteLenCounter);      // save contents of A in square 1 note counter
     ldy(*Square1SoundBuffer);       // is there a sound playing on square 1?
     bne(HandleTriangleMusic);
@@ -2508,7 +2507,7 @@ FetchNoiseBeatData:
     bne(FetchNoiseBeatData);       // unconditional branch
 
 NoiseBeatHandler:
-    AlternateLengthHandler(&a, &x, c);
+    AlternateLengthHandler(&a, &x);
     sta(*Noise_BeatLenCounter);     // store length in noise beat counter
     txa();
     and(0x3e);                      // reload data and erase length bits
@@ -2548,9 +2547,9 @@ ExitMusicHandler:
     return;
 }
 
-void AlternateLengthHandler(uint8_t *pa, uint8_t *px, bool c) {
+void AlternateLengthHandler(uint8_t *pa, uint8_t *px) {
     uint8_t a = *pa, x = *px;
-    bool n, z;
+    bool n, z, c = false;
 
     tax();      // save a copy of original byte into X
     ror(a);     // save LSB from original byte into carry
@@ -3035,8 +3034,8 @@ void smb1_init(void) {
     VRAM_AddrTable[7] = VRAM_Buffer2;
 
     // init VRAM_Buffer_Offset
-    VRAM_Buffer_Offset[0] = VRAM_Buffer1_Offset - memory;
-    VRAM_Buffer_Offset[1] = VRAM_Buffer2_Offset - memory;
+    VRAM_Buffer_Offset[0] = (uint8_t)(VRAM_Buffer1_Offset - memory);
+    VRAM_Buffer_Offset[1] = (uint8_t)(VRAM_Buffer2_Offset - memory);
 
     Start();
 }

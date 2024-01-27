@@ -40,7 +40,7 @@ void cpu_write_joy2(uint8_t value);
     z = result == 0; \
     v = !((a & 0x80) ^ ((uint8_t)(value) & 0x80)) && ((a & 0x80) ^ (result & 0x80)); \
     n = (int8_t)result < 0; \
-    a = result; \
+    a = (uint8_t)result; \
 }
 
 #define and(value) { \
@@ -250,7 +250,7 @@ void cpu_write_joy2(uint8_t value);
     z = result == 0; \
     v = !((a & 0x80) ^ ((uint8_t)(value) & 0x80)) && ((a & 0x80) ^ (result & 0x80)); \
     n = (int8_t)result < 0; \
-    a = result; \
+    a = (uint8_t)result; \
 }
 
 #define sec() { \
