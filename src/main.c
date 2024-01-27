@@ -196,6 +196,7 @@ int64_t gettime(void) {
         LARGE_INTEGER lpFrequency;
         QueryPerformanceFrequency(&lpFrequency);
         frequency = lpFrequency.QuadPart;
+        init = true;
     }
 
     LARGE_INTEGER lpPerformanceCount;
