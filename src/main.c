@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200112L
 
 #include <errno.h>
 #include <stdio.h>
@@ -25,6 +25,12 @@
 #include "ppu.h"
 
 #include "smb1.h"
+
+#ifdef _MSC_VER
+#define INLINE __forceinline
+#else
+#define INLINE extern __inline__ __attribute__((__always_inline__,__gnu_inline__))
+#endif
 
 smb1_input_t saved_inputs;
 
@@ -188,7 +194,7 @@ void poll_events(bool *should_quit) {
     }
 }
 
-int64_t gettime(void) {
+INLINE int64_t gettime(void) {
 #ifdef _WIN32
     static int64_t frequency;
     static bool init = false;
@@ -210,15 +216,16 @@ int64_t gettime(void) {
 #endif
 }
 
-void sleep(int64_t ns) {
+INLINE void sleep(int64_t ns) {
 #ifdef _WIN32
     Sleep((DWORD)(ns / 1000000LL));
 #else
-    struct timespec tp = {
-        .tv_sec = ns / 1000000000LL,
-        .tv_nsec = ns % 1000000000LL
+    int64_t request_ns = gettime() + ns;
+    struct timespec request = {
+        .tv_sec = request_ns / 1000000000LL,
+        .tv_nsec = request_ns % 1000000000LL
     };
-    while (nanosleep(&tp, &tp) == -1 && errno == EINTR) {}
+    while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &request, NULL) == EINTR);
 #endif
 }
 

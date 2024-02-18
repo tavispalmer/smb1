@@ -6,19 +6,11 @@
 
 #include "smb1.h"
 
-#define SR_NEGATIVE     ((uint8_t)0x80)
-#define SR_OVERFLOW     ((uint8_t)0x40)
-#define SR_BREAK        ((uint8_t)0x10)
-#define SR_DECIMAL      ((uint8_t)0x08)
-#define SR_INTERRUPT    ((uint8_t)0x04)
-#define SR_ZERO         ((uint8_t)0x02)
-#define SR_CARRY        ((uint8_t)0x01)
-
 extern uint16_t pc;
 extern uint8_t a;
 extern uint8_t x;
 extern uint8_t y;
-extern uint8_t sr;
+extern bool n, v, d, i, z, c;
 extern uint8_t sp;
 
 extern bool interactive;

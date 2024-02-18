@@ -13,7 +13,7 @@ uint16_t pc;
 uint8_t a;
 uint8_t x;
 uint8_t y;
-uint8_t sr;
+bool n, v, d, i, z, c;
 uint8_t sp;
 
 bool interactive;
@@ -28,14 +28,14 @@ void cpu_print_registers(void) {
         a,
         x,
         y,
-        (sr & SR_NEGATIVE) >> 7,
-        (sr & SR_OVERFLOW) >> 6,
-        (sr & 0x20) >> 5,
-        (sr & SR_BREAK) >> 4,
-        (sr & SR_DECIMAL) >> 3,
-        (sr & SR_INTERRUPT) >> 2,
-        (sr & SR_ZERO) >> 1,
-        sr & SR_CARRY,
+        n,
+        v,
+        0,
+        0,
+        0,
+        i,
+        z,
+        c,
         sp
     );
 }
@@ -325,52 +325,24 @@ void cpu_write_joy1(uint8_t value) {
 }
 
 void cpu_adc(uint8_t value) {
-    uint16_t result = a + value + (sr & 0x01);
+    uint16_t result = a + value + (c ? 1 : 0);
 
     // flags
-    if (result & 0x100) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
+    c = (result & 0x100) != 0;
+    z = (uint8_t)result == 0;
+    v = !((a & 0x80) ^ (value & 0x80))
+        && ((a & 0x80) ^ (result & 0x80));
+    n = (int8_t)result < 0;
 
-    if (!(result & 0xff)) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (!((a & 0x80) ^ (value & 0x80))
-        && ((a & 0x80) ^ (result & 0x80))) {
-        sr |= SR_OVERFLOW;
-    } else {
-        sr &= ~SR_OVERFLOW;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
-
-    a = result;
+    a = (uint8_t)result;
 }
 
 void cpu_and(uint8_t value) {
     uint8_t result = a & value;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     a = result;
 }
@@ -379,80 +351,52 @@ uint8_t cpu_asl(uint8_t value) {
     uint8_t result = value << 1;
 
     // flags
-    if (value & 0x80) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (value & 0x80) != 0;
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     return result;
 }
 
 void cpu_bcc(uint8_t value) {
-    if (!(sr & SR_CARRY)) {
+    if (!c) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_bcs(uint8_t value) {
-    if (sr & SR_CARRY) {
+    if (c) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_beq(uint8_t value) {
-    if (sr & SR_ZERO) {
+    if (z) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_bit(uint8_t value) {
     // flags
-    if (!(a & value)) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (value & 0x40) {
-        sr |= SR_OVERFLOW;
-    } else {
-        sr &= ~SR_OVERFLOW;
-    }
-
-    if (value & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = (a & value) == 0;
+    v = (value & 0x40) != 0;
+    n = (int8_t)value < 0;
 }
 
 void cpu_bmi(uint8_t value) {
-    if (sr & SR_NEGATIVE) {
+    if (n) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_bne(uint8_t value) {
-    if (!(sr & SR_ZERO)) {
+    if (!z) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_bpl(uint8_t value) {
-    if (!(sr & SR_NEGATIVE)) {
+    if (!n) {
         pc += (int8_t)value;
     }
 }
@@ -465,117 +409,66 @@ void cpu_brk(void) {
 }
 
 void cpu_bvc(uint8_t value) {
-    if (!(sr & SR_OVERFLOW)) {
+    if (!v) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_bvs(uint8_t value) {
-    if (sr & SR_OVERFLOW) {
+    if (v) {
         pc += (int8_t)value;
     }
 }
 
 void cpu_clc(void) {
-    sr &= ~SR_CARRY;
+    c = false;
 }
 
 void cpu_cld(void) {
-    sr &= ~SR_DECIMAL;
+    d = false;
 }
 
 void cpu_cli(void) {
-    sr &= ~SR_INTERRUPT;
+    i = false;
 }
 
 void cpu_clv(void) {
-    sr &= ~SR_OVERFLOW;
+    v = false;
 }
 
 void cpu_cmp(uint8_t value) {
-    uint16_t result = a + ((~value) & 0xff) + 1;
+    uint16_t result = a + (uint8_t)(~value) + 1;
 
     // flags
-    if (result & 0x100) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!(result & 0xff)) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (result & 0x100) != 0;
+    z = (uint8_t)result == 0;
+    n = (int8_t)result < 0;
 }
 
 void cpu_cpx(uint8_t value) {
-    uint16_t result = x + ((~value) & 0xff) + 1;
+    uint16_t result = x + (uint8_t)(~value) + 1;
 
     // flags
-    if (result & 0x100) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!(result & 0xff)) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (result & 0x100) != 0;
+    z = (uint8_t)result == 0;
+    n = (int8_t)result < 0;
 }
 
 void cpu_cpy(uint8_t value) {
-    uint16_t result = y + ((~value) & 0xff) + 1;
+    uint16_t result = y + (uint8_t)(~value) + 1;
 
     // flags
-    if (result & 0x100) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!(result & 0xff)) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (result & 0x100) != 0;
+    z = (uint8_t)result == 0;
+    n = (int8_t)result < 0;
 }
 
 uint8_t cpu_dec(uint8_t value) {
     uint8_t result = value - 1;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     return result;
 }
@@ -584,17 +477,8 @@ void cpu_dex(void) {
     uint8_t result = x - 1;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     x = result;
 }
@@ -603,17 +487,8 @@ void cpu_dey(void) {
     uint8_t result = y - 1;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     y = result;
 }
@@ -622,17 +497,8 @@ void cpu_eor(uint8_t value) {
     uint8_t result = a ^ value;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     a = result;
 }
@@ -641,17 +507,8 @@ uint8_t cpu_inc(uint8_t value) {
     uint8_t result = value + 1;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    z = (int8_t)result < 0;
 
     return result;
 }
@@ -660,17 +517,8 @@ void cpu_inx(void) {
     uint8_t result = x + 1;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     x = result;
 }
@@ -679,17 +527,8 @@ void cpu_iny(void) {
     uint8_t result = y + 1;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     y = result;
 }
@@ -707,51 +546,24 @@ void cpu_jsr(uint16_t address) {
 
 void cpu_lda(uint8_t value) {
     // flags
-    if (!value) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (value & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = value == 0;
+    n = (int8_t)value < 0;
 
     a = value;
 }
 
 void cpu_ldx(uint8_t value) {
     // flags
-    if (!value) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (value & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = value == 0;
+    n = (int8_t)value < 0;
 
     x = value;
 }
 
 void cpu_ldy(uint8_t value) {
     // flags
-    if (!value) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (value & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = value == 0;
+    n = (int8_t)value < 0;
 
     y = value;
 }
@@ -760,19 +572,9 @@ uint8_t cpu_lsr(uint8_t value) {
     uint8_t result = value >> 1;
 
     // flags
-    if (value & 0x01) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    sr &= ~SR_NEGATIVE;
+    c = (value & 0x01) != 0;
+    z = result == 0;
+    n = false;
 
     return result;
 }
@@ -784,17 +586,8 @@ void cpu_ora(uint8_t value) {
     uint8_t result = a | value;
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     a = result;
 }
@@ -804,78 +597,50 @@ void cpu_pha(void) {
 }
 
 void cpu_php(void) {
-    cpu_write(0x100 | sp--, sr | SR_BREAK | 0x20);
+    cpu_write(0x100 | sp--,
+        (n ? 0x80 : 0) | (v ? 0x40 : 0) | 0x30 |
+        (d ? 0x08 : 0) | (i ? 0x04 : 0) | (z ? 0x02 : 0) | (c ? 0x01 : 0));
 }
 
 void cpu_pla(void) {
     uint8_t result = cpu_read(0x100 | ++sp);
 
     // flags
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     a = result;
 }
 
 void cpu_plp(void) {
-    sr = (cpu_read(0x100 | ++sp) & ~(SR_BREAK | 0x20)) | (sr & (SR_BREAK | 0x20));
+    uint8_t result = cpu_read(0x100 | ++sp);
+
+    n = (result & 0x80) != 0;
+    v = (result & 0x40) != 0;
+    d = (result & 0x08) != 0;
+    i = (result & 0x04) != 0;
+    z = (result & 0x02) != 0;
+    c = (result & 0x01) != 0;
 }
 
 uint8_t cpu_rol(uint8_t value) {
-    uint8_t result = (value << 1) | (sr & 0x01);
+    uint8_t result = (value << 1) | (c ? 0x01 : 0);
 
     // flags
-    if (value & 0x80) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (value & 0x80) != 0;
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     return result;
 }
 
 uint8_t cpu_ror(uint8_t value) {
-    uint8_t result = (value >> 1) | (sr << 7);
+    uint8_t result = (value >> 1) | (c ? 0x80 : 0);
 
     // flags
-    if (value & 0x01) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!result) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (value & 0x01) != 0;
+    z = result == 0;
+    n = (int8_t)result < 0;
 
     return result;
 }
@@ -893,47 +658,28 @@ void cpu_rts(void) {
 }
 
 void cpu_sbc(uint8_t value) {
-    uint16_t result = a + ((~value) & 0xff) + (sr & 0x01);
+    uint16_t result = a + (uint8_t)(~value) + (c ? 1 : 0);
 
     // flags
-    if (result & 0x100) {
-        sr |= SR_CARRY;
-    } else {
-        sr &= ~SR_CARRY;
-    }
-
-    if (!(result & 0xff)) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (!((a & 0x80) ^ ((~value) & 0x80))
-        && ((a & 0x80) ^ (result & 0x80))) {
-        sr |= SR_OVERFLOW;
-    } else {
-        sr &= ~SR_OVERFLOW;
-    }
-
-    if (result & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    c = (result & 0x100) != 0;
+    z = (uint8_t)result == 0;
+    v = !((a & 0x80) ^ ((~value) & 0x80))
+        && ((a & 0x80) ^ (result & 0x80));
+    n = (int8_t)result < 0;
 
     a = result;
 }
 
 void cpu_sec(void) {
-    sr |= SR_CARRY;
+    c = true;
 }
 
 void cpu_sed(void) {
-    sr |= SR_DECIMAL;
+    d = true;
 }
 
 void cpu_sei(void) {
-    sr |= SR_INTERRUPT;
+    i = true;
 }
 
 uint8_t cpu_sta(void) {
@@ -950,102 +696,48 @@ uint8_t cpu_sty(void) {
 
 void cpu_tax(void) {
     // flags
-    if (!a) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (a & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = a == 0;
+    n = (int8_t)a < 0;
 
     x = a;
 }
 
 void cpu_tay(void) {
     // flags
-    if (!a) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (a & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = a == 0;
+    n = (int8_t)a < 0;
 
     y = a;
 }
 
 void cpu_tsx(void) {
     // flags
-    if (!sp) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (sp & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = sp == 0;
+    n = (int8_t)sp < 0;
 
     x = sp;
 }
 
 void cpu_txa(void) {
     // flags
-    if (!x) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (x & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = x == 0;
+    n = (int8_t)x < 0;
 
     a = x;
 }
 
 void cpu_txs(void) {
     // flags
-    if (!x) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (x & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = x == 0;
+    n = (int8_t)x < 0;
 
     sp = x;
 }
 
 void cpu_tya(void) {
     // flags
-    if (!y) {
-        sr |= SR_ZERO;
-    } else {
-        sr &= ~SR_ZERO;
-    }
-
-    if (y & 0x80) {
-        sr |= SR_NEGATIVE;
-    } else {
-        sr &= ~SR_NEGATIVE;
-    }
+    z = y == 0;
+    n = (int8_t)y < 0;
 
     a = y;
 }
