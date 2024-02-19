@@ -196,19 +196,13 @@ void poll_events(bool *should_quit) {
 
 INLINE int64_t gettime(void) {
 #ifdef _WIN32
-    static int64_t frequency;
-    static bool init = false;
-    if (!init) {
-        LARGE_INTEGER lpFrequency;
-        QueryPerformanceFrequency(&lpFrequency);
-        frequency = lpFrequency.QuadPart;
-        init = true;
+    static LARGE_INTEGER frequency;
+    if (!frequency.QuadPart) {
+        QueryPerformanceFrequency(&frequency);
     }
-
-    LARGE_INTEGER lpPerformanceCount;
-    QueryPerformanceCounter(&lpPerformanceCount);
-    int64_t performance_count = lpPerformanceCount.QuadPart;
-    return performance_count * 1000000000LL / frequency;
+    LARGE_INTEGER performanceCount;
+    QueryPerformanceCounter(&performanceCount);
+    return performanceCount.QuadPart * 1000000000LL / frequency.QuadPart;
 #else
     struct timespec tp;
     clock_gettime(CLOCK_MONOTONIC, &tp);
@@ -218,7 +212,11 @@ INLINE int64_t gettime(void) {
 
 INLINE void sleep(int64_t ns) {
 #ifdef _WIN32
-    Sleep((DWORD)(ns / 1000000LL));
+    LARGE_INTEGER dueTime = { .QuadPart = -(ns / 100LL) };
+    HANDLE timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    SetWaitableTimerEx(timer, &dueTime, 0, NULL, NULL, NULL, 0);
+    WaitForSingleObject(timer, INFINITE);
+    CloseHandle(timer);
 #else
     int64_t request_ns = gettime() + ns;
     struct timespec request = {
