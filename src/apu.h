@@ -9,12 +9,12 @@ extern "C" {
 #include <stdint.h>
 
 // ~60.0988
-#define FPS_NUM 39375000ULL
-#define FPS_DEM 655171ULL
+#define FPS_NUMER 39375000ULL
+#define FPS_DENOM 655171ULL
 
 #define APU_CHANNEL_COUNT 2
 #define APU_SAMPLE_RATE 44100
-#define APU_SAMPLES_SIZE ((APU_SAMPLE_RATE * FPS_DEM / FPS_NUM)*APU_CHANNEL_COUNT*sizeof(int16_t))
+#define APU_SAMPLES_SIZE ((APU_SAMPLE_RATE * FPS_DENOM / FPS_NUMER)*APU_CHANNEL_COUNT*sizeof(int16_t))
 extern const int16_t *apu_samples;
 
 void apu_init(void);

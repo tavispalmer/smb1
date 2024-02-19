@@ -8,6 +8,7 @@
 # define ssize_t long long
 # include <windows.h>
 #else
+# include <pthread.h>
 # include <sys/param.h>
 # include <time.h>
 #endif
@@ -46,45 +47,20 @@ typedef struct {
     size_t size;
 } queue_t;
 
-void queue_init(queue_t *queue) {
+void queue_init(queue_t *queue, size_t capacity) {
     memset(queue, 0, sizeof(queue_t));
+    queue->array = malloc(capacity);
+    queue->capacity = capacity;
 }
 
 void queue_destroy(queue_t *queue) {
-    if (queue->array) {
-        free(queue->array);
-    }
+    free(queue->array);
 }
 
-void queue_enqueue(queue_t *queue, const void *buf, size_t count) {
-    if (count <= 0) {
-        return;
-    }
-
-    if (queue->size + count > queue->capacity) {
-        size_t newcapacity = queue->capacity ? queue->capacity : 4;
-        while (queue->size + count > newcapacity) {
-            newcapacity *= 2;
-        }
-
-        uint8_t *newarray = malloc(newcapacity);
-        if (queue->size > 0) {
-            if (queue->head < queue->tail) {
-                memcpy(newarray, queue->array + queue->head, queue->size);
-            }
-            else {
-                memcpy(newarray, queue->array + queue->head, queue->capacity - queue->head);
-                memcpy(newarray + queue->capacity - queue->head, queue->array, queue->tail);
-            }
-        }
-
-        if (queue->array) {
-            free(queue->array);
-        }
-        queue->capacity = newcapacity;
-        queue->array = newarray;
-        queue->head = 0;
-        queue->tail = (queue->size == newcapacity) ? 0 : queue->size;
+ssize_t queue_enqueue(queue_t *queue, const void *buf, size_t count) {
+    count = MIN(count, queue->capacity - queue->size);
+    if (count == 0) {
+        return 0;
     }
 
     size_t first_part = MIN(queue->capacity - queue->tail, count);
@@ -96,12 +72,14 @@ void queue_enqueue(queue_t *queue, const void *buf, size_t count) {
 
     queue->tail = (queue->tail + count) % queue->capacity;
     queue->size += count;
+
+    return count;
 }
 
-void queue_dequeue(queue_t *queue, void *buf, size_t count) {
+ssize_t queue_dequeue(queue_t *queue, void *buf, size_t count) {
     count = MIN(count, queue->size);
-    if (count <= 0) {
-        return;
+    if (count == 0) {
+        return 0;
     }
 
     size_t first_part = MIN(queue->capacity - queue->head, count);
@@ -113,13 +91,59 @@ void queue_dequeue(queue_t *queue, void *buf, size_t count) {
 
     queue->head = (queue->head + count) % queue->capacity;
     queue->size -= count;
+
+    return count;
 }
 
+#ifndef _WIN32
+typedef pthread_mutex_t mutex_t;
+typedef pthread_cond_t cond_t;
+#endif
+
+INLINE void mutex_init(mutex_t *mutex) {
+    pthread_mutex_init((pthread_mutex_t *)mutex, NULL);
+}
+
+INLINE void mutex_destroy(mutex_t *mutex) {
+    pthread_mutex_destroy((pthread_mutex_t *)mutex);
+}
+
+INLINE void mutex_lock(mutex_t *mutex) {
+    pthread_mutex_lock((pthread_mutex_t *)mutex);
+}
+
+INLINE void mutex_unlock(mutex_t *mutex) {
+    pthread_mutex_unlock((pthread_mutex_t *)mutex);
+}
+
+INLINE void cond_init(cond_t *cond) {
+    pthread_cond_init((pthread_cond_t *)cond, NULL);
+}
+
+INLINE void cond_destroy(cond_t *cond) {
+    pthread_cond_destroy((pthread_cond_t *)cond);
+}
+
+INLINE void cond_signal(cond_t *cond) {
+    pthread_cond_signal((pthread_cond_t *)cond);
+}
+
+INLINE void cond_wait(cond_t *cond, mutex_t *mutex) {
+    pthread_cond_wait((pthread_cond_t *)cond, (pthread_mutex_t *)mutex);
+}
+
+typedef struct {
+    queue_t queue;
+    mutex_t mutex;
+    cond_t cond;
+} callback_data_t;
+
 void sdl_audio_callback(void *userdata, Uint8* stream, int len) {
-    queue_t *audio_queue = (queue_t *)userdata;
+    callback_data_t *callback_data = (callback_data_t *)userdata;
     
-    size_t count = MIN(len, audio_queue->size);
-    queue_dequeue(audio_queue, stream, count);
+    size_t count = MIN(len, callback_data->queue.size);
+    queue_dequeue(&callback_data->queue, stream, count);
+    cond_signal(&callback_data->cond);
     memset(stream + count, 0, len - count);
 }
 
@@ -210,7 +234,7 @@ INLINE int64_t gettime(void) {
 #endif
 }
 
-INLINE void sleep(int64_t ns) {
+void sleep(int64_t ns) {
     // code based on https://github.com/python/cpython
 #ifdef _WIN32
     static DWORD flags = -1;
@@ -274,8 +298,14 @@ int main(int argc, char **argv) {
     }
 
     // audio
-    queue_t audio_queue;
-    queue_init(&audio_queue);
+    callback_data_t callback_data;
+    queue_init(&callback_data.queue, 16384 * sizeof(int16_t));
+    mutex_init(&callback_data.mutex);
+    cond_init(&callback_data.cond);
+
+    uint8_t *tmp = calloc(16384 * sizeof(int16_t), 1);
+    queue_enqueue(&callback_data.queue, tmp, 16384 * sizeof(int16_t));
+    free(tmp);
 
     SDL_AudioSpec out;
     SDL_AudioSpec spec;
@@ -283,9 +313,9 @@ int main(int argc, char **argv) {
     spec.freq = APU_SAMPLE_RATE;
     spec.format = AUDIO_S16SYS;
     spec.channels = 2;
-    spec.samples = 1024;
+    spec.samples = 4096;
     spec.callback = sdl_audio_callback;
-    spec.userdata = &audio_queue;
+    spec.userdata = &callback_data;
 
     SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(NULL, false, &spec, &out, 0);
     if (!audio_device) {
@@ -304,11 +334,24 @@ int main(int argc, char **argv) {
 
         int64_t start = gettime();
 
+        poll_events(&should_quit);
+
         smb1_run();
 
-        SDL_LockAudioDevice(audio_device);
-        queue_enqueue(&audio_queue, apu_samples, APU_SAMPLES_SIZE);
-        SDL_UnlockAudioDevice(audio_device);
+        size_t written = 0;
+        while (written < APU_SAMPLES_SIZE) {
+            SDL_LockAudioDevice(audio_device);
+            if (callback_data.queue.capacity == callback_data.queue.size) {
+                SDL_UnlockAudioDevice(audio_device);
+                mutex_lock(&callback_data.mutex);
+                cond_wait(&callback_data.cond, &callback_data.mutex);
+                mutex_unlock(&callback_data.mutex);
+            } else {
+                size_t write_amt = queue_enqueue(&callback_data.queue, apu_samples + written, APU_SAMPLES_SIZE - written);
+                SDL_UnlockAudioDevice(audio_device);
+                written += write_amt;
+            }
+        }
 
         uint8_t *pixels;
         int pitch;
@@ -343,16 +386,16 @@ int main(int argc, char **argv) {
 
         int64_t stop = gettime();
 
-        int64_t time_remaining = (1048273600ULL / 63ULL) + start - stop;
-        if (time_remaining > 0) {
-            sleep(time_remaining);
+        int64_t remaining = (1048273600ULL / 63ULL) + start - stop;
+        if (remaining > 0) {
+            sleep(remaining);
         }
-
-        poll_events(&should_quit);
     }
 
     SDL_CloseAudioDevice(audio_device);
-    queue_destroy(&audio_queue);
+    cond_destroy(&callback_data.cond);
+    mutex_destroy(&callback_data.mutex);
+    queue_destroy(&callback_data.queue);
 
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
