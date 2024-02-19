@@ -211,9 +211,20 @@ INLINE int64_t gettime(void) {
 }
 
 INLINE void sleep(int64_t ns) {
+    // code based on https://github.com/python/cpython
 #ifdef _WIN32
+    static DWORD flags = -1;
+    if (flags == -1) {
+        HANDLE timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        if (!timer) {
+            flags = 0;
+        } else {
+            flags = CREATE_WAITABLE_TIMER_HIGH_RESOLUTION;
+            CloseHandle(timer);
+        }
+    }
     LARGE_INTEGER dueTime = { .QuadPart = -(ns / 100LL) };
-    HANDLE timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    HANDLE timer = CreateWaitableTimerExW(NULL, NULL, flags, TIMER_ALL_ACCESS);
     SetWaitableTimerEx(timer, &dueTime, 0, NULL, NULL, NULL, 0);
     WaitForSingleObject(timer, INFINITE);
     CloseHandle(timer);
