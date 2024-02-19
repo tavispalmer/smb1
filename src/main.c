@@ -95,10 +95,61 @@ ssize_t queue_dequeue(queue_t *queue, void *buf, size_t count) {
     return count;
 }
 
-#ifndef _WIN32
+#ifdef _WIN32
+
+// based on https://github.com/python/cpython
+
+typedef CRITICAL_SECTION mutex_t;
+typedef struct {
+    HANDLE sem;
+    int waiting;
+} cond_t;
+
+INLINE void mutex_init(mutex_t *mutex) {
+    InitializeCriticalSection(mutex);
+}
+
+INLINE void mutex_destroy(mutex_t *mutex) {
+    DeleteCriticalSection(mutex);
+}
+
+INLINE void mutex_lock(mutex_t *mutex) {
+    EnterCriticalSection(mutex);
+}
+
+INLINE void mutex_unlock(mutex_t *mutex) {
+    LeaveCriticalSection(mutex);
+}
+
+INLINE void cond_init(cond_t *cond) {
+    cond->sem = CreateSemaphore(NULL, 0, 100000, NULL);
+    cond->waiting = 0;
+}
+
+INLINE void cond_destroy(cond_t *cond) {
+    CloseHandle(cond->sem);
+}
+
+INLINE void cond_signal(cond_t *cond) {
+    if (cond->waiting > 0) {
+        --cond->waiting;
+        ReleaseSemaphore(cond->sem, 1, NULL);
+    }
+}
+
+INLINE void cond_wait(cond_t *cond, mutex_t *mutex) {
+    ++cond->waiting;
+    mutex_unlock(mutex);
+    DWORD result = WaitForSingleObjectEx(cond->sem, INFINITE, FALSE);
+    mutex_lock(mutex);
+    if (result != WAIT_OBJECT_0)
+        --cond->waiting;
+}
+
+#else
+
 typedef pthread_mutex_t mutex_t;
 typedef pthread_cond_t cond_t;
-#endif
 
 INLINE void mutex_init(mutex_t *mutex) {
     pthread_mutex_init((pthread_mutex_t *)mutex, NULL);
@@ -131,6 +182,8 @@ INLINE void cond_signal(cond_t *cond) {
 INLINE void cond_wait(cond_t *cond, mutex_t *mutex) {
     pthread_cond_wait((pthread_cond_t *)cond, (pthread_mutex_t *)mutex);
 }
+
+#endif
 
 typedef struct {
     queue_t queue;
